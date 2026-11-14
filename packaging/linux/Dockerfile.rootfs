@@ -1,0 +1,21 @@
+FROM debian:13-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392
+
+ENV DEBIAN_FRONTEND=noninteractive
+COPY docker.asc /etc/apt/keyrings/docker.asc
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && echo '1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570  /etc/apt/keyrings/docker.asc' | sha256sum -c - \
+    && printf 'deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable\n' > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates systemd systemd-sysv iptables procps \
+       docker-ce=5:29.9.3-1~debian.13~trixie docker-ce-cli=5:29.9.3-1~debian.13~trixie \
+       containerd.io=2.4.2-4~debian.13~trixie docker-buildx-plugin=0.39.0-1~debian.13~trixie \
+    && mkdir -p /usr/local/share/ucd/procps \
+    && for package in procps libproc2-0 libncursesw6 libtinfo6; do \
+         (cd /usr/local/share/ucd/procps && apt-get download "$package") \
+         && mv /usr/local/share/ucd/procps/"$package"_*.deb /usr/local/share/ucd/procps/"$package".deb || exit 1; \
+       done \
+    && systemctl enable docker.service containerd.service \
+    && printf '[boot]\nsystemd=true\n[user]\ndefault=root\n' > /etc/wsl.conf \
+    && test -x /usr/bin/dockerd && test -x /lib/systemd/systemd && /usr/bin/ps -ef > /dev/null \
+    && test -x /usr/libexec/docker/cli-plugins/docker-buildx && docker buildx version \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb /var/lib/docker /var/lib/containerd

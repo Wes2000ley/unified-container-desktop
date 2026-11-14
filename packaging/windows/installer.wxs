@@ -1,0 +1,104 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Unified Container Desktop" Manufacturer="Unified Container Desktop" Version="$(var.ProductVersion)"
+           UpgradeCode="836F2C8D-051D-4B48-9500-7F0C8A4AA199" Scope="perMachine">
+    <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of Unified Container Desktop is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="UcdProductIcon" SourceFile="$(var.SourceDir)\cmd\desktop\assets\ucd-icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="UcdProductIcon" />
+    <!-- Regular shortcuts must not trigger repair of service-only bootstrap files. -->
+    <Property Id="DISABLEADVTSHORTCUTS" Value="1" />
+    <Property Id="UCD_DOCKER_DESKTOP_MACHINE">
+      <RegistrySearch Id="DockerDesktopMachineUninstall" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop" Name="DisplayName" Type="raw" />
+    </Property>
+    <Property Id="UCD_DOCKER_DESKTOP_USER">
+      <RegistrySearch Id="DockerDesktopUserUninstall" Root="HKCU" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop" Name="DisplayName" Type="raw" />
+    </Property>
+    <Launch Condition="REMOVE~=&quot;ALL&quot; OR (NOT UCD_DOCKER_DESKTOP_MACHINE AND NOT UCD_DOCKER_DESKTOP_USER)"
+            Message="Uninstall Docker Desktop before installing Unified Container Desktop. UCD installs the system-wide docker command; the two products cannot share a PC." />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="UnifiedContainerDesktop">
+        <Directory Id="DOCKERCOMMAND" Name="docker-command" />
+        <Directory Id="CLIPLUGINS" Name="cli-plugins" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAROOT" Name="UnifiedContainerDesktop">
+        <Directory Id="BOOTSTRAP" Name="bootstrap" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Unified Container Desktop" />
+    </StandardDirectory>
+    <Feature Id="Main" Title="Unified Container Desktop" Level="1">
+      <ComponentGroupRef Id="ProgramFiles" />
+      <ComponentGroupRef Id="DockerCommand" />
+      <ComponentGroupRef Id="DockerPlugins" />
+      <ComponentGroupRef Id="BootstrapFiles" />
+    </Feature>
+    <CustomAction Id="RollbackFresh" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action rollback -RemoveServices" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RollbackUpgrade" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action rollback" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RollbackUninstall" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RollbackRestoreUpgrade" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
+    <CustomAction Id="Provision" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action install" Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <!-- Recreate after old-product removal (6501), before finalization (6600). -->
+      <CreateShortcuts Sequence="6550" />
+      <Custom Action="RollbackRestoreUpgrade" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED OR (Installed AND NOT REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="RollbackUninstall" Before="StopServices" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="RollbackFresh" After="InstallFiles" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
+      <Custom Action="RollbackUpgrade" After="RollbackFresh" Condition="Installed OR WIX_UPGRADE_DETECTED" />
+      <Custom Action="Provision" After="WriteRegistryValues" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+      <ScheduleReboot After="Provision" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
+    </InstallExecuteSequence>
+  </Package>
+  <Fragment>
+    <ComponentGroup Id="DockerPlugins" Directory="CLIPLUGINS">
+      <Component Id="DockerComposePlugin" Guid="*"><File Source="$(var.PayloadDir)\docker-compose.exe" /></Component>
+      <Component Id="DockerBuildxPlugin" Guid="*"><File Source="$(var.PayloadDir)\docker-buildx.exe" /></Component>
+    </ComponentGroup>
+    <ComponentGroup Id="ProgramFiles" Directory="INSTALLFOLDER">
+      <Component Id="Controller" Guid="*">
+        <File Id="ControllerExe" Source="$(var.PayloadDir)\controller.exe" KeyPath="yes" />
+        <ServiceControl Id="ControllerControl" Name="UnifiedContainerDesktop" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Component Id="WindowsDocker" Guid="*">
+        <File Id="DockerDaemon" Source="$(var.PayloadDir)\dockerd.exe" KeyPath="yes" />
+        <ServiceControl Id="DockerControl" Name="UCDDocker" Stop="both" Remove="uninstall" Wait="yes" />
+        <RegistryValue Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\UCDDocker" Name="CustomSource" Type="integer" Value="1" />
+        <RegistryValue Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\UCDDocker" Name="EventMessageFile" Type="string" Value="[INSTALLFOLDER]dockerd.exe" />
+        <RegistryValue Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\UCDDocker" Name="TypesSupported" Type="integer" Value="7" />
+      </Component>
+      <Component Id="Desktop" Guid="*">
+        <File Id="DesktopExe" Source="$(var.PayloadDir)\desktop.exe" KeyPath="yes" />
+        <Shortcut Id="DesktopShortcut" Directory="ApplicationProgramsFolder" Name="Unified Container Desktop" WorkingDirectory="INSTALLFOLDER" Advertise="yes" />
+        <RemoveFolder Id="RemoveProgramMenu" Directory="ApplicationProgramsFolder" On="uninstall" />
+      </Component>
+      <Component Id="Cli" Guid="*">
+        <File Source="$(var.PayloadDir)\ucd.exe" />
+        <Environment Id="UcdPath" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="first" Action="set" System="yes" />
+      </Component>
+      <Component Id="DockerClient" Guid="*"><File Source="$(var.PayloadDir)\docker-cli.exe" /></Component>
+      <Component Id="DockerDesktopGuard" Guid="*"><File Source="$(var.PayloadDir)\docker-desktop-guard.psm1" /></Component>
+      <Component Id="DockerCredentialHelper" Guid="*"><File Source="$(var.PayloadDir)\docker-credential-ucd.exe" /></Component>
+      <Component Id="WindowsFileTool" Guid="*"><File Source="$(var.PayloadDir)\ucd-filetool.exe" /></Component>
+      <Component Id="ProvisionScript" Guid="*"><File Id="ProvisionScriptFile" Source="$(var.SourceDir)\packaging\windows\provision.ps1" /></Component>
+      <Component Id="License" Guid="*"><File Source="$(var.SourceDir)\LICENSE" /></Component>
+      <Component Id="Notice" Guid="*"><File Source="$(var.SourceDir)\NOTICE" /></Component>
+      <Component Id="ThirdPartyNotices" Guid="*"><File Source="$(var.SourceDir)\THIRD_PARTY_NOTICES.txt" /></Component>
+    </ComponentGroup>
+    <ComponentGroup Id="DockerCommand" Directory="DOCKERCOMMAND">
+      <Component Id="DockerDispatcher" Guid="*">
+        <File Source="$(var.PayloadDir)\docker.exe" KeyPath="yes" />
+        <Environment Id="UcdDockerCommandPath" Name="PATH" Value="[DOCKERCOMMAND]" Permanent="no" Part="first" Action="set" System="yes" />
+      </Component>
+    </ComponentGroup>
+    <ComponentGroup Id="BootstrapFiles" Directory="BOOTSTRAP">
+      <Component Id="Rootfs" Guid="*"><File Source="$(var.PayloadDir)\debian-rootfs.tar" /></Component>
+      <Component Id="RootfsHash" Guid="*"><File Source="$(var.PayloadDir)\debian-rootfs.tar.sha256" /></Component>
+      <Component Id="Helper" Guid="*"><File Source="$(var.PayloadDir)\ucd-helper" /></Component>
+      <Component Id="LinuxFileTool" Guid="*"><File Source="$(var.PayloadDir)\ucd-filetool" /></Component>
+      <Component Id="LinuxBuildx" Guid="*"><File Source="$(var.PayloadDir)\docker-buildx" /></Component>
+      <Component Id="HelperUnit" Guid="*"><File Source="$(var.SourceDir)\packaging\linux\ucd-helper.service" /></Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

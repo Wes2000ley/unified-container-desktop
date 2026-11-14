@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="tile" x1="16" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182635"/>
+      <stop offset="1" stop-color="#101820"/>
+    </linearGradient>
+    <linearGradient id="left" x1="40" y1="52" x2="64" y2="106" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#70D7D0"/>
+      <stop offset="1" stop-color="#39A8E8"/>
+    </linearGradient>
+    <linearGradient id="right" x1="64" y1="51" x2="90" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#62D2C4"/>
+      <stop offset="1" stop-color="#3389D4"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#tile)"/>
+  <path d="M64 25 96 42.5v39L64 100 32 81.5v-39L64 25Z" stroke="#4A9ED9" stroke-opacity=".35" stroke-width="2"/>
+  <path d="m64 39 22 12.5v26L64 90 42 77.5v-26L64 39Z" fill="#152632" stroke="#77D8D1" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M64 64v26M42 51.5l22 12.5 22-12.5M64 39v25" stroke="url(#left)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M64 64v26l22-12.5v-26L64 64Z" fill="url(#right)" fill-opacity=".22"/>
+  <path d="M64 64v26m0-26 22-12.5" stroke="#6FC8DF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

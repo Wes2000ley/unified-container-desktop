@@ -1,0 +1,32 @@
+.resource-section {
+  margin-bottom: 16px;
+}
+.resource-subheading {
+  margin: 22px 0 10px;
+}
+.resource-bulk {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 22px 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.resource-inline {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.resource-inline > label:not(.check-row) {
+  min-width: 210px;
+}
+.prune-filters {
+  max-width: 620px;
+  margin: 18px 0 8px;
+}
+.prune-filters + p {
+  margin-bottom: 14px;
+}

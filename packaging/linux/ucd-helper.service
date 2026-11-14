@@ -1,0 +1,25 @@
+[Unit]
+Description=Unified Container Desktop Linux helper
+After=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ucd-helper --config=/etc/ucd/helper.json
+Environment=DOCKER_CONFIG=/var/lib/ucd/docker-config
+Restart=on-failure
+User=root
+Group=root
+UMask=0077
+StateDirectory=ucd
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/ucd /etc/docker
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

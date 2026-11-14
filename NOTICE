@@ -1,0 +1,32 @@
+Unified Container Desktop
+Copyright 2026 Unified Container Desktop contributors
+
+This product includes third-party software. Application source is distributed
+under Apache License 2.0; that license does not replace licenses applying to
+Docker, WSL, Debian packages, Go, React, Wails, or other dependencies.
+
+THIRD_PARTY_NOTICES.txt contains license and notice texts from modules linked
+into the shipped Go binaries, production JavaScript packages, and the bundled
+Windows Docker Engine and CLI. Docker CLI attribution includes conservative
+source coverage from its exact upstream commit because its binary metadata
+does not enumerate linked dependencies. Source URLs and versions accompany
+the additional Docker texts. The frontend directory also retains attribution
+for the starter references used during development. The production frontend
+includes xterm.js, its fit addon, and modern-tar; their license texts and
+copyright notices are included in THIRD_PARTY_NOTICES.txt.
+
+The package also includes the official Docker Compose 5.7.1 and Buildx
+0.38.2 Windows CLI plugins and the Linux Buildx 0.39.0 plugin. Their upstream
+dependency inventories, license and notice texts, and versioned source links
+are included in THIRD_PARTY_NOTICES.txt. Buildx includes MPL-2.0-covered
+source under bake/hclparser; the corresponding exact versioned source trees
+are identified in those notices.
+
+The Debian rootfs retains package copyright and license files under
+/usr/share/doc. Package names and exact installed versions can be inspected with
+dpkg-query -W inside the dedicated distribution. Debian and Docker source
+packages are maintained by their respective upstream distributors.
+
+The bundled WSL MSI is Microsoft's unmodified, signed redistribution. Its terms
+and notices remain Microsoft's. Docker engine binaries are distributed from
+Docker's official download and signed package repositories.

@@ -1,0 +1,57 @@
+name: Build release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rootfs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build Debian WSL rootfs
+        shell: pwsh
+        run: ./scripts/build-rootfs.ps1 -Output "$env:RUNNER_TEMP/debian-rootfs.tar" -DockerConfig "$env:RUNNER_TEMP/docker-config" -DockerHost 'unix:///var/run/docker.sock'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debian-rootfs
+          path: |
+            ${{ runner.temp }}/debian-rootfs.tar
+            ${{ runner.temp }}/debian-rootfs.tar.sha256
+          retention-days: 1
+  package:
+    needs: rootfs
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.11'
+          cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.15.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: debian-rootfs
+          path: ${{ runner.temp }}/ucd-rootfs
+      - name: Test and build
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install WiX and package
+        shell: pwsh
+        run: |
+          dotnet tool install wix --version 4.0.6 --tool-path "$env:RUNNER_TEMP/wix"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/package.ps1 -Rootfs "$env:RUNNER_TEMP/ucd-rootfs/debian-rootfs.tar" -CacheDirectory "$env:RUNNER_TEMP/ucd-cache" -Wix "$env:RUNNER_TEMP/wix/wix.exe"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: UnifiedContainerDesktop-windows-x64
+          path: dist/*
+          if-no-files-found: error
