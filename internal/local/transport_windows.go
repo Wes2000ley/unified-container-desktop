@@ -223,6 +223,16 @@ func (c *peerConn) Close() error {
 	return err
 }
 
+// Preserve named-pipe half-close through the authenticated connection wrapper.
+// ReverseProxy must flush output and send EOF before closing an exec stream.
+func (c *peerConn) CloseWrite() error {
+	writer, ok := c.Conn.(interface{ CloseWrite() error })
+	if !ok {
+		return errors.New("pipe connection does not support write half-close")
+	}
+	return writer.CloseWrite()
+}
+
 func pipePrincipal(conn net.Conn) (api.Principal, error) {
 	fd, ok := conn.(interface{ Fd() uintptr })
 	if !ok {
