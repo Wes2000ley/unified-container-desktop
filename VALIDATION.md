@@ -1,5 +1,31 @@
 # Validation record
 
+## Public beta publication review (0.4.17)
+
+Before publication, Gitleaks 8.30.1 scanned all existing Git branches and tags
+with `gitleaks git . --log-opts=--all --redact=100`, and a separate export of the
+publication tree with `gitleaks dir`. The scanner used its default rules without
+a baseline, repository allowlist or inline suppressions. The history scan reported
+five token-rule matches in third-party notices: three public upstream Git
+revisions and two SHA-1 values in upstream checksum tests. Their original source
+lines were reviewed; none was a credential. The current publication-tree scan
+reported zero findings. No AWS authentication files were accessed and no detected
+value was validated against an external service. A secret-pattern scan cannot
+prove that every possible credential format is absent; this is a focused
+publication check, not a complete security audit.
+
+The main, frontend and packaging READMEs were revised for users and contributors.
+Detailed operating behavior and platform limits are in `docs/OPERATIONS.md`.
+Relative links and anchors in the public guides were checked. Local environment
+files, private keys and signing material are excluded from ordinary Git additions.
+
+Final runtime qualification source `bd7736766199022d56a7638cee2977215c1c741b`
+passed [Windows/Linux CI](https://github.com/Wes2000ley/unified-container-desktop/actions/runs/43679275738),
+including 100 consecutive immediate-exec regression checks on Windows. The
+[release build](https://github.com/Wes2000ley/unified-container-desktop/actions/runs/43678022457)
+also completed successfully. The tested installer is unchanged by this
+documentation cleanup; its checksum and live acceptance limits remain below.
+
 ## Installed beta and Windows exec stream fix (0.4.17)
 
 The Windows runner exposed immediate exec output loss through the authenticated

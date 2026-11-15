@@ -8,3 +8,12 @@
 *.log
 *.test.exe
 *.test
+
+# Local credentials and signing material must not be committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12

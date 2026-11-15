@@ -1,21 +1,46 @@
-# Unified Container Desktop frontend
+# Shared desktop and web interface
 
-React and TypeScript interface for the Wails 3 desktop application. The production interface calls the `main.Bridge.Call` service and requires the local controller; it does not simulate engine data.
+UCD uses one React/TypeScript interface for its Wails 3 desktop application and
+the loopback browser adapter. Both call the same authenticated machine controller;
+production assets do not simulate engines or container data.
 
-Desktop and browser clients use the same charcoal workspace, SVG icons, inventory tables and container detail views. The dashboard shows real engine status and container measurements, with partial measurements identified explicitly. Settings are organized into General, Resources, File sharing, Proxies, Network, Access and Activity. Category changes keep forms mounted so unsaved values survive; saving still uses the existing service permissions and configuration operations. Recent events remain paginated within Activity.
+## Development
 
-Use Node.js 24.15 or newer and run from this directory:
+Use Node.js 24.15 or newer. From this directory:
 
 ```powershell
 npm ci
 npm run check
 npm run build
 npm run test:e2e
+```
+
+The Go applications embed `dist` through `assets.go`. Build the frontend before
+compiling them, or use the root [build script](../scripts/build.ps1).
+
+`npm run check` runs TypeScript, lint and component tests. Playwright fixture tests
+alias the runtime to `tests/fixtures/fake-runtime.ts` only when `UCD_TEST_BRIDGE=1`.
+Those assets go to `.test-dist`, separate from production `dist`; fixture tests do
+not qualify native IPC, the controller or either real engine.
+
+## Installed application checks
+
+```powershell
 npm run test:web
 ```
 
-The Go desktop build embeds `dist` through `assets.go`; run the frontend build before compiling the desktop application. Browser tests deliberately alias the runtime to `tests/fixtures/fake-runtime.ts` only when `UCD_TEST_BRIDGE=1` and write their assets to `.test-dist`, separate from production `dist`. They do not verify the native service, engines, or Wails IPC.
+This launches the built `../bin/ucd.exe web` adapter against production assets and
+checks its actual service response. Build the binaries first, or set `UCD_CLI` to
+the executable being tested. It reports a missing machine service and does not
+replace installed dual-engine acceptance. See [VALIDATION.md](../VALIDATION.md)
+for recorded qualification results.
 
-The same interface is also served by `ucd web` at its printed loopback launch URL. The URL fragment contains a session token; the interface removes it from the address bar and retains it in that tab's session storage for refreshes. Keep the launch URL private. If the session token is missing, restart `ucd web` and open its new launch URL. Browser calls use the same local controller operations as the desktop interface.
+## Browser sessions
 
-`npm run test:web` launches the built `../bin/ucd.exe` and exercises the real production web adapter. It does not use the fixture runtime. Build the release binaries first, or set `UCD_CLI` to the CLI executable to test. A missing machine service is reported honestly; this test does not replace installed dual-engine acceptance.
+Run `ucd web` and open the loopback URL it prints. The adapter uses the invoking
+Windows user's permissions. The URL fragment contains a session token; the
+interface removes it from the address bar and retains it in that tab's session
+storage for refreshes. Keep the launch URL private. If the token is missing,
+restart `ucd web` and use its new URL. Stop the adapter with Ctrl+C.
+
+See the [operating guide](../docs/OPERATIONS.md) for user workflows and permissions.
