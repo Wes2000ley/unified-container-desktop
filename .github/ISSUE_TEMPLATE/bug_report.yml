@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible UCD problem. Use SECURITY.md for vulnerabilities.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: UCD version and Windows edition/build
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Affected engine
+      options: [Linux, Windows, Both, Installer or interface]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps or exact commands
+      description: Include expected and observed results. Remove credentials and private project data.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted errors or logs
+      description: Never include registry tokens, service-account secrets, or browser launch URLs.

@@ -25,6 +25,8 @@ try {
     $env:GOARCH = 'amd64'
     $env:CGO_ENABLED = '0'
     $env:GOOS = 'windows'
+    & go build -trimpath -o bin\ucd-prerequisites.exe ./packaging/windows
+    if ($LASTEXITCODE -ne 0) { throw "Setup prerequisite launcher build failed: $LASTEXITCODE" }
     & go build -trimpath -o bin\controller.exe ./cmd/controller
     if ($LASTEXITCODE -ne 0) { throw "controller build failed: $LASTEXITCODE" }
     & go build -trimpath -tags production -ldflags '-H=windowsgui' -o bin\desktop.exe ./cmd/desktop

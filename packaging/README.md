@@ -28,7 +28,37 @@ The machine-wide package targets Windows 11 Pro or Enterprise x64, build 22621 o
 
 ## Installation
 
-Keep `Setup.ps1`, `docker-desktop-guard.psm1`, `UnifiedContainerDesktop.msi`, `UnifiedContainerDesktop.msi.sha256` and `wsl.3.0.5.0.x64.msi` together. Uninstall Docker Desktop first; coinstallation is unsupported. Setup checks for Desktop before enabling features or changing WSL. Standard Desktop uninstall registrations also block direct MSI installation, and provisioning checks running Desktop processes. These checks do not block UCD removal or rollback and do not uninstall Desktop automatically. From an elevated Windows PowerShell session, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Setup.ps1`. If it reports that a reboot is required, restart and run the same command again. The setup script enables the Containers, Hyper-V, Windows Subsystem for Linux and VirtualMachinePlatform Windows features. Hyper-V supports isolation of native Windows containers; Linux containers run in the dedicated WSL distribution. It installs the bundled Microsoft-signed WSL 3.0.5 package only when an existing WSL version is below 2.5.4. It verifies the WSL package's pinned SHA-256 and Microsoft signature before installing it. Setup verifies the product MSI against its accompanying checksum; the current build is unsigned, so distribute it through a trusted channel and verify its hash independently. Existing WSL installations are shared Windows components, so updating an old WSL version can affect other WSL workloads. No WSL distribution is imported under the installing user.
+Run **UnifiedContainerDesktop-Setup.exe**. It is a WiX 4 Burn bundle containing the
+application MSI, fixed prerequisite scripts, the verified Microsoft WSL MSI and
+the Debian rootfs. No adjacent files or elevated shell commands are required.
+Approve UAC, then let Setup enable the four Windows features and install WSL when
+needed. Existing WSL 2.5.4 or newer is retained. Hardware virtualization must
+already be enabled in BIOS/UEFI; unsupported Windows editions and Docker Desktop
+coinstallation fail with an actionable prerequisite error.
+
+Features and WSL have separate restart boundaries. Full UI asks whether to restart
+now; closing defers it. Burn caches the installation and resumes at the next
+package after restart and sign-in. For unattended deployment, explicitly use
+`UnifiedContainerDesktop-Setup.exe /quiet /norestart /log C:\path\setup.log`.
+Without `/norestart`, WiX's unattended mode permits a required restart. A deferred
+prerequisite restart returns a restart status, not completed application setup;
+check the resumed installation before deploying workloads. Never request an
+unattended restart on a machine whose workloads cannot be interrupted.
+
+The MSI verifies features are enabled and WSL is usable before provisioning; it
+no longer enables features itself or schedules an unconditional first-install
+restart. Setup adds the account identified by Windows Installer's `UserSID` to
+Container Operators when it is a normal local/domain/Entra user SID. SYSTEM
+installs do not pick an interactive user. UAC using alternate credentials can
+identify the administrator rather than the desktop user. Other memberships are
+managed explicitly through UCD's Access settings.
+
+Burn's main log links each prerequisite and MSI log. Provisioning failures also
+write `%SystemRoot%\Temp\Ucd-provision-*.log`. Obtain the unsigned beta through a
+trusted channel and verify the published SHA-256 independently. MSI payload and
+Burn payload hashes validate their contents; they do not replace code signing.
+Setup does not uninstall Docker Desktop, unregister another distribution, or
+remove shared Windows features/WSL when UCD is uninstalled.
 
 The MSI puts `%ProgramFiles%\UnifiedContainerDesktop` first on the machine PATH. In a new terminal, `docker` defaults to Linux; `docker --engine windows` selects Windows, including Compose and Buildx. Both use the authenticated controller broker. The official Docker executable is installed as `docker-cli.exe` behind this entry point. Existing `ucd` management commands remain available.
 
@@ -62,7 +92,7 @@ networks:
 
 In that recovery, Compose up still failed on the missing old network. The administrator connected the stopped container to the verified replacement network with its aliases and started it. Review the specific container, network membership and data before planning any comparable intervention.
 
-Setup refuses to replace an existing `UcdService` without the matching LSA secret or an existing product-named service pointing elsewhere. It also refuses installation while another Windows `dockerd.exe` is running. It never changes existing daemon services, NAT networks or unrelated WSL distributions. A reboot is needed after enabling optional features; the main MSI schedules one on first installation. MSI major upgrades restore application files when a transaction rolls back. Uninstall removes application services and installed files but preserves the account, LSA secret, profile, distribution, projects, images and volumes in ProgramData. Administrators should back up this data before upgrading. A VM suite passed upgrade to a 0.1.1 test MSI, an injected failure and rollback, repair, uninstall and reinstall after reboot with preservation checks. The restored 0.1.0 package, helper, ports and browser then passed their recorded checks on that VM.
+Setup refuses to replace an existing `UcdService` without the matching LSA secret or an existing product-named service pointing elsewhere. It also refuses installation while another Windows `dockerd.exe` is running. It never changes existing daemon services, NAT networks or unrelated WSL distributions. Setup completes any required optional-feature restart before the main MSI is installed. MSI major upgrades restore application files when a transaction rolls back. Uninstall removes application services and installed files but preserves the account, LSA secret, profile, distribution, projects, images and volumes in ProgramData. Administrators should back up this data before upgrading. A VM suite passed upgrade to a 0.1.1 test MSI, an injected failure and rollback, repair, uninstall and reinstall after reboot with preservation checks. The restored 0.1.0 package, helper, ports and browser then passed their recorded checks on that VM.
 
 ## Build
 
@@ -73,7 +103,7 @@ Run from the repository root, using a task-specific Docker configuration if desi
 ```powershell
 ./scripts/build.ps1
 ./scripts/build-rootfs.ps1 -Output C:\build\debian-rootfs.tar -DockerConfig C:\build\docker-config
-./scripts/package.ps1 -Rootfs C:\build\debian-rootfs.tar -CacheDirectory C:\build\ucd-cache -Wix C:\tools\wix4\wix.exe
+./scripts/package.ps1 -Rootfs C:\build\debian-rootfs.tar -RootfsSources C:\build\debian-rootfs.tar.sources.tar.gz -CacheDirectory C:\build\ucd-cache -Wix C:\tools\wix4\wix.exe
 ```
 
 The desktop includes a committed Windows resource object, so ordinary builds do not require icon-generation tools. After changing `frontend/public/ucd-icon.svg`, regenerate the transparent PNG, multi-size ICO and resource object with ImageMagick 7 and GNU windres:
@@ -86,6 +116,23 @@ windres -i ucd.rc -o ucd_windows_amd64.syso -O coff
 Pop-Location
 ```
 
-`dist` receives the MSI, its checksum, the setup script and the verified Microsoft WSL MSI. Use the sidecar accompanying the actual MSI being installed; a hash from a prior build does not identify the current package. Builds download the pinned Docker/WSL packages when missing from the cache. The release workflow builds the rootfs on Linux and the binaries/MSI on Windows, and uploads those files as an artifact. The release ZIP includes selected JSON records under `acceptance-evidence/`; raw development-machine reports are not part of the product MSI. Code signing of product binaries/MSI requires an independently supplied signing identity and is not performed by this workflow. Clean-target and representative upgrade checks require a Windows 11 target with hardware virtualization, administrative privileges and the intended security policy; a successful build alone is not a live installation test.
+`dist` receives the single-file Setup executable, internal MSI, SHA-256 sidecars,
+corresponding Debian source archive and rootfs/source hash association, and the
+license/install/validation documents. `build-rootfs.ps1` builds the runtime target,
+then collects each exact Debian source package into a separate archive. The
+source stage fails if an exact package is unavailable; it never substitutes a
+newer source. `package.ps1` requires `-RootfsSources` and verifies that the archive
+and runtime match the source manifest. Release both the Setup and corresponding
+sources together. Docker/Compose/Buildx and WSL keep their own licenses and
+versioned upstream sources; see NOTICE and THIRD_PARTY_NOTICES.txt.
+
+CI runs Windows/Linux Go checks, prerequisite behavior checks and frontend/browser
+fixture tests. The release workflow builds the rootfs and matching source archive
+on Linux, then binaries, MSI and Setup on Windows. Artifacts are not automatically
+published as a public release. Code signing requires a separately supplied
+identity; these beta packages are unsigned. Fresh-install, reboot/resume,
+representative upgrade, repair and removal checks need a Windows 11 target with
+hardware virtualization and administrator privileges. A build or extracted
+manifest does not establish those live results.
 
 When the default `node.exe` is older than 24.15.0, pass a newer executable with `-Node`; if npm is installed separately, pass its `npm-cli.js` with `-NpmCli`. The build script temporarily prepends that Node directory to PATH and restores its process environment on exit. Major upgrades share stable component identities and use Windows Installer rollback for application files. A failed upgrade or repair attempts to restore and start both services; it does not preserve an intentional prior stopped state.

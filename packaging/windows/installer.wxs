@@ -11,6 +11,9 @@
          credentials and engine data are outside MSI components. Replace even
          an unversioned binary changed by a prior repair or diagnostic update. -->
     <Property Id="REINSTALLMODE" Value="amus" />
+    <!-- Burn supplies its own command-line default. Apply UCD's packaged-file
+         policy before costing for install and repair as well as direct MSI use. -->
+    <SetProperty Id="REINSTALLMODE" Value="amus" Before="CostInitialize" Sequence="execute" />
     <Property Id="UCD_DOCKER_DESKTOP_MACHINE">
       <RegistrySearch Id="DockerDesktopMachineUninstall" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop" Name="DisplayName" Type="raw" />
     </Property>
@@ -43,7 +46,7 @@
     <CustomAction Id="RollbackUpgrade" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action rollback" Execute="rollback" Impersonate="no" Return="ignore" />
     <CustomAction Id="RollbackUninstall" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
     <CustomAction Id="RollbackRestoreUpgrade" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
-    <CustomAction Id="Provision" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action install" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="Provision" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action install -OperatorSID &quot;[UserSID]&quot;" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="RemovePublishedFirewall" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action firewall-remove" Execute="deferred" Impersonate="no" Return="check" />
     <!-- Staged rules retain all administrator filters for uninstall rollback.
          Commit runs after program files have been removed, so it is self-contained. -->
@@ -59,7 +62,6 @@
       <Custom Action="RollbackFresh" After="InstallFiles" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
       <Custom Action="RollbackUpgrade" After="RollbackFresh" Condition="Installed OR WIX_UPGRADE_DETECTED" />
       <Custom Action="Provision" After="WriteRegistryValues" Condition="NOT REMOVE~=&quot;ALL&quot;" />
-      <ScheduleReboot After="Provision" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
     </InstallExecuteSequence>
   </Package>
   <Fragment>

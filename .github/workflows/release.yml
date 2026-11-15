@@ -19,6 +19,8 @@ jobs:
           path: |
             ${{ runner.temp }}/debian-rootfs.tar
             ${{ runner.temp }}/debian-rootfs.tar.sha256
+            ${{ runner.temp }}/debian-rootfs.tar.sources.tar.gz
+            ${{ runner.temp }}/debian-rootfs.tar.sources.json
           retention-days: 1
   package:
     needs: rootfs
@@ -42,6 +44,8 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/build.ps1
+          powershell.exe -NoProfile -File packaging/windows/tests/setup.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go test ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install WiX and package
@@ -49,7 +53,7 @@ jobs:
         run: |
           dotnet tool install wix --version 4.0.6 --tool-path "$env:RUNNER_TEMP/wix"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/package.ps1 -Rootfs "$env:RUNNER_TEMP/ucd-rootfs/debian-rootfs.tar" -CacheDirectory "$env:RUNNER_TEMP/ucd-cache" -Wix "$env:RUNNER_TEMP/wix/wix.exe"
+          ./scripts/package.ps1 -Rootfs "$env:RUNNER_TEMP/ucd-rootfs/debian-rootfs.tar" -RootfsSources "$env:RUNNER_TEMP/ucd-rootfs/debian-rootfs.tar.sources.tar.gz" -CacheDirectory "$env:RUNNER_TEMP/ucd-cache" -Wix "$env:RUNNER_TEMP/wix/wix.exe"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: UnifiedContainerDesktop-windows-x64

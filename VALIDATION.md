@@ -1,5 +1,62 @@
 # Validation record
 
+## Single-file Setup and public beta preparation (0.4.16)
+
+The new WiX 4.0.6 Burn bundle embeds the prerequisite launcher/scripts, verified
+Microsoft WSL 3.0.5 MSI and application MSI/rootfs. Users need one Setup executable.
+Windows features and WSL have separate forced-restart boundaries. Full UI offers
+Restart or Close; unattended deployment must use `/norestart` to suppress restart.
+The main MSI now requires completed prerequisites rather than enabling features
+or scheduling an unconditional fresh-install reboot. It grants the installing
+Windows user's SID operator membership; SYSTEM installations do not choose an
+interactive user. The application remains unsigned.
+
+Local validation to this point:
+
+- Windows PowerShell 5.1 prerequisite behavior tests: 18 passed, with all mutation
+  commands replaced. Covered feature pending states, required restart codes,
+  existing/newer/missing WSL, platform/BIOS checks and concrete failure propagation.
+- Docker Desktop exclusion tests passed. All changed PowerShell files parsed.
+- `scripts/build.ps1` produced Windows binaries and Linux helper/file-tool outputs.
+  `scripts/package.ps1` completed MSI ICE validation and built the bundled Setup.
+- `go test ./...`, `go vet ./...` and `go mod verify` passed for the initial build.
+  Frontend `npm run check` passed all 59 tests; `npm run test:e2e` passed 21 workflows.
+  The existing jsdom canvas diagnostic and bundle-size warning remain warnings.
+- Production npm audit: zero vulnerabilities. The full developer audit reports
+  nine moderate reports rooted in minimatch's glob amplification advisory; the
+  pinned typescript-eslint version still requires minimatch 10. No incompatible
+  override or dependency downgrade was introduced. See RELEASING.md.
+- Corresponding Debian sources were collected from the exact qualified rootfs,
+  including the four staged offline-repair Debian packages. All 222 archived
+  files passed their recorded SHA-256 checks. The package verifies rootfs/source
+  hash association and includes exact WiX upstream sources and license text.
+- Setup `/layout /quiet /norestart` returned 0 with `restart: None`. Welcome UI was
+  inspected with native UI Automation and a window-only screenshot, then canceled
+  before installation (exit 1602). An initial UI probe assumed the BA process used
+  the original executable path; Burn uses a copied BA process. The corrected probe
+  verified its parent PID, captured the controls and closed the confirmation.
+- The first 0.4.14 MSI to 0.4.15 bundle upgrade returned 0; both prerequisite
+  packages returned 0, and existing WSL 3.0.5 was retained. Both engines reported
+  online at 0.4.15, without a Windows restart. Windows Installer's UserSID identified
+  the actual installing account. All 21 installed payload hashes matched; settings,
+  service identities/automatic startup and operator membership were preserved.
+  The wrapper's `Start-Process -Wait` kept waiting after Burn exited, then completed
+  successfully when the descendant process ended. Later verification uses the root
+  process handle to avoid that delay. Original logs and the passed receipt are
+  retained. No containers
+  existed at that upgrade's actual baseline, so it does not prove preservation of
+  a running container.
+- Live logging showed Burn supplies `REINSTALLMODE=muso` by default. WiX rejected
+  a direct MsiProperty override with WIX0365 because Burn owns that command-line
+  property. The MSI now sets UCD's `amus` policy in its execute sequence before
+  costing, retaining replacement of packaged unversioned files during repair.
+
+Final installed-bundle qualification and remote CI results will be recorded below.
+The user explicitly declined another test VM. A fresh Windows installation,
+actual optional-feature/WSL installation, restart/resume, and bundle uninstall or
+rollback are not live-qualified by these upgrade-only checks. Historical MSI-only
+results below are separate evidence and are not new bundle test results.
+
 ## 0.4.14 installed public-port forwarding and host qualification
 
 Version 0.4.14 is installed on WES-PC. Setup returned 0, all 21 installed program/bootstrap hashes matched the reviewed manifest, and both automatic machine services were online. The controller runs as UcdService; native Windows Docker runs as LocalSystem. Skyri's unelevated client reports the operator role. Windows was not restarted. MSI SHA-256: `6e5fc6f06ac5a47a04e99aad5ba96825f396c09ea0de183b500179044fb0f4a1`; ProductCode: `{9159316A-870E-47A1-80C4-F14788156C80}`. Release inputs and receipts are under `work/ucd-desktop-0.4.14`, relative to the task root.

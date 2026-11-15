@@ -1,4 +1,4 @@
-param([ValidateSet('install', 'rollback', 'restore-services', 'firewall-remove')][string]$Action = 'install', [switch]$RemoveServices)
+param([ValidateSet('install', 'rollback', 'restore-services', 'firewall-remove')][string]$Action = 'install', [switch]$RemoveServices, [string]$OperatorSID)
 $ErrorActionPreference = 'Stop'
 trap {
     $failure = $_.Exception.ToString() + [Environment]::NewLine + $_.InvocationInfo.PositionMessage + [Environment]::NewLine + $_.ScriptStackTrace
@@ -280,8 +280,8 @@ try {
     $wslVersion = (& "$env:SystemRoot\System32\wsl.exe" --version 2>&1 | Out-String) -replace "`0", ''
     $wslExit = $LASTEXITCODE
 } finally { $ErrorActionPreference = 'Stop' }
-if ($wslExit -ne 0 -or $wslVersion -notmatch '(\d+\.\d+\.\d+)') { throw 'WSL 2.5.4 or later must be installed before this MSI. Run the supplied Setup.ps1 bootstrapper.' }
-if ([version]$Matches[1] -lt [version]'2.5.4') { throw 'WSL 2.5.4 or later must be installed before this MSI. Run the supplied Setup.ps1 bootstrapper.' }
+if ($wslExit -ne 0 -or $wslVersion -notmatch '(\d+\.\d+\.\d+)') { throw 'WSL 2.5.4 or later must be installed before this MSI. Run UnifiedContainerDesktop-Setup.exe.' }
+if ([version]$Matches[1] -lt [version]'2.5.4') { throw 'WSL 2.5.4 or later must be installed before this MSI. Run UnifiedContainerDesktop-Setup.exe.' }
 
 $dockerExe = Join-Path $install 'dockerd.exe'
 $controllerExe = Join-Path $install 'controller.exe'
@@ -291,15 +291,19 @@ $ourDocker = Get-CimInstance Win32_Service -Filter "Name='UCDDocker'"
 $competing = @(Get-CimInstance Win32_Process -Filter "Name='dockerd.exe'" | Where-Object { -not $ourDocker -or $_.ProcessId -ne $ourDocker.ProcessId })
 if ($competing.Count) { throw 'Another native Windows Docker daemon is running. Stop it before installing Unified Container Desktop.' }
 
-$restart = $false
 foreach ($feature in @('Containers', 'Microsoft-Hyper-V-All', 'Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform')) {
     $state = Get-WindowsOptionalFeature -Online -FeatureName $feature
-    if ($state.State -ne 'Enabled') {
-        $result = Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart
-        if ($result.RestartNeeded) { $restart = $true }
-    }
+    if ($state.State -ne 'Enabled') { throw "Required Windows feature $feature is $($state.State). Run UnifiedContainerDesktop-Setup.exe and complete its prerequisite restart before installing the MSI." }
 }
 if (-not (Get-LocalGroup -Name $group -ErrorAction SilentlyContinue)) { New-LocalGroup -Name $group -Description 'Privileged Unified Container Desktop operators' | Out-Null }
+# UserSID is supplied by Windows Installer, not inferred from the active desktop.
+# SYSTEM deployments do not automatically grant an interactive user's access.
+if ($OperatorSID -match '^S-1-(5-21|12-1)-[0-9-]+$') {
+    $operatorIdentity = [Security.Principal.SecurityIdentifier]$OperatorSID
+    if (-not (Get-LocalGroupMember -Group $group | Where-Object { $_.SID.Value -eq $operatorIdentity.Value })) {
+        Add-LocalGroupMember -Group $group -Member $operatorIdentity.Translate([Security.Principal.NTAccount]).Value
+    }
+}
 $exists = [bool](Get-LocalUser -Name $account -ErrorAction SilentlyContinue)
 $sid = [UcdNative]::EnsureAccount($exists)
 [UcdNative]::GrantRights($sid)
@@ -362,7 +366,5 @@ $dockerCommand = '"' + $dockerExe + '" --run-service --service-name UCDDocker --
 [UcdNative]::EnsureService('UnifiedContainerDesktop', 'Unified Container Desktop', ('"' + $controllerExe + '"'), $true)
 [UcdNative]::EnsureControllerQueryAccess()
 Set-PublishedPortFirewall $false
-if (-not $restart) {
-    Start-Service UCDDocker
-    Start-Service UnifiedContainerDesktop
-} else { Write-Host 'Windows features require a reboot. Both services will start after restart.' }
+Start-Service UCDDocker
+Start-Service UnifiedContainerDesktop

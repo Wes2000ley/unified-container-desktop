@@ -1,0 +1,42 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Unified Container Desktop" Manufacturer="Unified Container Desktop"
+          Version="$(var.ProductVersion)" UpgradeCode="D183BA9E-8FE6-4625-8567-9DDD8E79B066"
+          IconSourceFile="$(var.SourceDir)\cmd\desktop\assets\ucd-icon.ico"
+          AboutUrl="https://github.com/Wes2000ley/unified-container-desktop">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense"
+          LicenseUrl="https://github.com/Wes2000ley/unified-container-desktop/blob/master/LICENSE"
+          LogoFile="$(var.SourceDir)\cmd\desktop\assets\ucd-icon.png"
+          LocalizationFile="$(var.SourceDir)\packaging\windows\setup.wxl"
+          LaunchTarget="[ProgramFiles64Folder]UnifiedContainerDesktop\desktop.exe" SuppressOptionsUI="yes" />
+    </BootstrapperApplication>
+    <Chain>
+      <!-- Separate boundaries: resume with WSL after the feature restart,
+           then with UCD after any WSL restart. Shared prerequisites are retained. -->
+      <ExePackage Id="WindowsFeatures" SourceFile="$(var.SourceDir)\bin\ucd-prerequisites.exe"
+          DisplayName="Windows container and virtualization features" PerMachine="yes" Permanent="yes"
+          DetectCondition="0" Cache="remove" CacheId="UCD.Features.$(var.ProductVersion)" Vital="yes"
+          InstallArguments="-mode Features -log &quot;[WixBundleLog_WindowsFeatures]&quot;"
+          RepairArguments="-mode Features -log &quot;[WixBundleLog_WindowsFeatures]&quot;">
+        <PayloadGroupRef Id="PrerequisiteScripts" />
+        <ExitCode Value="3010" Behavior="forceReboot" />
+      </ExePackage>
+      <ExePackage Id="WslRuntime" Name="ucd-wsl-prerequisites.exe" SourceFile="$(var.SourceDir)\bin\ucd-prerequisites.exe"
+          DisplayName="Microsoft Windows Subsystem for Linux" PerMachine="yes" Permanent="yes"
+          DetectCondition="0" Cache="remove" CacheId="UCD.Wsl.$(var.ProductVersion)" Vital="yes"
+          InstallArguments="-mode Wsl -log &quot;[WixBundleLog_WslRuntime]&quot;"
+          RepairArguments="-mode Wsl -log &quot;[WixBundleLog_WslRuntime]&quot;">
+        <PayloadGroupRef Id="PrerequisiteScripts" />
+        <Payload SourceFile="$(var.WslMsi)" Name="wsl.3.0.5.0.x64.msi" />
+        <ExitCode Value="3010" Behavior="forceReboot" />
+      </ExePackage>
+      <MsiPackage Id="UcdApplication" SourceFile="$(var.ProductMsi)" Visible="no" Vital="yes" />
+    </Chain>
+  </Bundle>
+  <Fragment>
+    <PayloadGroup Id="PrerequisiteScripts">
+      <Payload SourceFile="$(var.SourceDir)\packaging\windows\Setup.ps1" Name="Setup.ps1" />
+      <Payload SourceFile="$(var.SourceDir)\packaging\windows\docker-desktop-guard.psm1" Name="docker-desktop-guard.psm1" />
+    </PayloadGroup>
+  </Fragment>
+</Wix>

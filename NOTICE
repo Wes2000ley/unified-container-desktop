@@ -30,3 +30,17 @@ packages are maintained by their respective upstream distributors.
 The bundled WSL MSI is Microsoft's unmodified, signed redistribution. Its terms
 and notices remain Microsoft's. Docker engine binaries are distributed from
 Docker's official download and signed package repositories.
+
+The Setup executable contains the WiX Toolset 4.0.6 Burn engine and standard
+bootstrapper application, Copyright (c) .NET Foundation and contributors,
+under the Microsoft Reciprocal License (MS-RL). The WiX-derived installer
+localization file packaging/windows/setup.wxl retains that license. The exact
+WiX upstream source archive accompanies binary releases; the modified
+localization source is included in this application's tagged source. The MS-RL
+text and versioned source URL are in THIRD_PARTY_NOTICES.txt.
+
+The release's UnifiedContainerDesktop-rootfs-sources.tar.gz contains exact
+Debian source packages, package manifests and per-file SHA-256 sums for the
+bundled runtime. rootfs-sources.json associates it with the shipped rootfs hash.
+This archive must accompany redistribution of the installer. Docker and
+Microsoft components retain their own notices and upstream source references.

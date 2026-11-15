@@ -2,25 +2,20 @@
 
 Manage native Windows Docker Engine and Linux Docker Engine from one Windows service, desktop application, browser interface, and CLI. Linux runs in one dedicated service-account-owned Debian WSL 2 distribution. The product uses the official Docker Compose v5 SDK on each operating system.
 
-Version **0.4.14 is installed on the development host**. UCD provides the ordinary system-wide `docker` command and excludes Docker Desktop coinstallation. Its upgrade returned exit 0, all 21 installed payload hashes matched, and both machine services are automatic and running. The desktop has one instance per Windows user session, including administrator handoff. No Windows restart was performed for this upgrade. The acceptance VM has been retired at the user's request; its evidence and release inputs remain available.
+UCD runs one shared Linux engine and one native Windows engine at the same time.
+Containers keep running when the GUI closes or users sign out. Authorized Windows
+users manage the same containers, images, volumes and registry sign-ins through
+the desktop, browser or ordinary `docker` and `docker compose` commands. No cloud
+account, subscription, telemetry or Docker Desktop installation is required.
 
-Installed 0.4.14 acceptance passed 59 workflow groups across networking, published ports, Resource Saver, file sharing, proxies and core GUI/CLI operations. The normal-user core run covered real simultaneous Linux/Windows Compose containers, Buildx, GUI logs/inspection/mounts/exec/files/statistics/restart, images and volumes. The desktop Start menu launch preserved both services and running containers. The earlier 0.4.9 normal-user CLI run passed 69 checks across both engines; shared registry scope, settings permissions, event pagination and preference restoration also passed production web checks. The package retains the fixes for shortcut-triggered MSI repair and upgrade ordering. See [VALIDATION.md](VALIDATION.md) and [ACCEPTANCE.md](ACCEPTANCE.md) for exact test boundaries and retained failed trials. The historical VM qualification table below applies to 0.3.0.
+**Public beta preparation: 0.4.16.** The single-file Windows Setup bundles WSL and
+the Debian runtime, enables required Windows features and resumes after a required
+restart. The installed 0.4.14 runtime passed the scoped GUI/CLI acceptance recorded
+in [VALIDATION.md](VALIDATION.md). Fresh-machine qualification of the new Setup is
+tracked there separately; a successful build is not installation qualification.
 
-The shared desktop and browser GUI now uses a neutral charcoal palette, consistent SVG icons, compact inventory controls and a dashboard with engine cards and a running-container preview. Settings are split into General, Resources, File sharing, Proxies, Network, Access and Activity; unsaved drafts survive category changes. Recent events stay paginated inside Activity. The redesign passed 59 frontend tests, 21 browser workflows and both production web-adapter tests.
-
-Advanced host acceptance has now passed eight Resource Saver/file-sharing workflow groups and 15 proxy workflow groups, including GUI/CLI settings round trips, automatic sleep/wake, share recovery after Linux engine stop/start, real HTTP/SOCKS5 registry pulls on both engines, and Buildx/Compose proxy defaults and overrides. Version 0.4.8 added UCD branding and engine-selection examples to Docker, Compose, Buildx and UCD help. See the latest [validation record](VALIDATION.md) for the exact test scope and remaining reboot/TLS-transfer boundaries.
-
-**0.3.0 core qualification passed** for the scoped workflows below on one disposable Windows 11 VM. The results do not establish universal Windows qualification. See [VALIDATION.md](VALIDATION.md) and [ACCEPTANCE.md](ACCEPTANCE.md) for the complete results, earlier failures and platform limits.
-
-| Check | Observed result |
-| --- | --- |
-| Upgrade | MSI exit 0 and all 12 installed payload hashes matched; the report's recovery-policy text assertion failed, and a separate native read-back confirmed the intended policy. |
-| Real engines | The installed 0.3.0 API regression passed 42 checks; all 24 recorded fixtures were absent afterward. |
-| Import and cleanup | A compatible Windows image import passed. Filtered prune passed for all five scopes on both engines; the Windows cache test removed one 0-byte record. |
-| Interface | The live browser and the native desktop opened both engines' original workloads; native UI Automation ran as a nonadministrator operator. |
-| Boot and preservation | Normal restart and cold boot passed without login, preserving the checked original data and log prefixes and producing fresh startup lines. |
-
-The boot checks followed a one-time repair of a 160-byte NUL gap in the tested VM’s Linux Docker log. The cause is unproven; UCD does not automatically repair corrupted Docker logs.
+See [Contributing](CONTRIBUTING.md) for development and bug reports and
+[Security](SECURITY.md) for privileges and vulnerability reporting.
 
 ## Core workflows
 
@@ -46,20 +41,32 @@ In **Storage**, select an engine and cleanup scope. Optional Docker filters use 
 
 Target: Windows 11 Pro or Enterprise x64, build 22621 or newer, hardware virtualization enabled, and administrator access. Windows Home and Windows Server are outside this release's scope.
 
-Keep these generated files from `dist` in one directory:
+Download **UnifiedContainerDesktop-Setup.exe** and run it. This is the only file
+needed to install. Approve the Windows administrator prompt. Uninstall Docker
+Desktop first; UCD deliberately blocks coinstallation and never deletes Desktop's
+data automatically.
 
-- `Setup.ps1`
-- `UnifiedContainerDesktop.msi`
-- `UnifiedContainerDesktop.msi.sha256`
-- `wsl.3.0.5.0.x64.msi`
+Setup enables Containers, Hyper-V, Windows Subsystem for Linux and
+VirtualMachinePlatform. It installs the bundled Microsoft-signed WSL package only
+when WSL is missing or older than 2.5.4; newer versions are preserved. It imports
+its own Debian distribution under the service account, without a manual Linux
+installation or per-user distro. Enabling features or updating WSL may require a
+restart. Choose **Restart** or **Close** to restart later; cached Setup resumes
+after the next sign-in. Save other work before choosing Restart. Updating shared
+WSL can affect other distributions. Windows may need Windows Update or its
+configured feature source to enable optional components.
 
-In an elevated Windows PowerShell window:
+After setup, launch **Unified Container Desktop** from Start and open a new
+terminal for the updated machine PATH. Setup adds the Windows account running
+the MSI to **Container Operators**; a SYSTEM deployment grants no interactive
+user automatically. If UAC used a different administrator account, that account
+is the installer identity; an administrator can add the intended user in Access
+settings. Membership is checked live by UCD. Only grant this privileged access to
+trusted users.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Setup.ps1
-```
-
-Restart when setup requests it, then rerun the same command. Setup enables the Containers, Hyper-V, Windows Subsystem for Linux, and VirtualMachinePlatform features. Hyper-V is required for native Windows container isolation; the Linux environment uses WSL 2. Existing WSL versions below 2.5.4 are updated using the bundled Microsoft-signed WSL package. Such an update affects the shared WSL installation, including other distributions.
+The separate corresponding-source archive is for redistribution and inspection;
+you do not need to download it to install. The MSI remains available to package
+builders; ordinary users should run the Setup executable.
 
 The package creates:
 
@@ -74,7 +81,7 @@ The package creates:
 
 `UcdService` is a noninteractive local administrator because loading its profile and managing the engines require those privileges. Its random password is stored in LSA private data and SCM; it is not supplied through MSI properties or command-line arguments. See [packaging/README.md](packaging/README.md) for provisioning, repair, upgrade and uninstall behavior.
 
-The product binaries and MSI are unsigned. The accompanying checksum verifies file integrity; publisher authentication depends on obtaining the package and expected checksum through a trusted channel. No signing identity has been configured.
+The UCD Setup executable, product binaries and MSI are unsigned. The accompanying checksum verifies file integrity; publisher authentication depends on obtaining the package and expected checksum through a trusted channel. No signing identity has been configured.
 
 ## Use
 
@@ -175,7 +182,7 @@ npm run test:web
 Pop-Location
 ```
 
-Build the frontend before Go tests or builds because the desktop and browser adapter embed `frontend/dist`. `build.ps1` accepts explicit `-Node` and `-NpmCli` paths when the default Node installation is older. See [packaging/README.md](packaging/README.md) for rootfs and MSI commands. Frontend fixture tests use `.test-dist`; those fixtures are not part of the production assets. `test:web` launches the real built `bin/ucd.exe web` adapter, checks the production assets and actual service response, and shuts down its owned server. Set `UCD_CLI` to a different built CLI path when needed.
+Build the frontend before Go tests or builds because the desktop and browser adapter embed `frontend/dist`. `build.ps1` accepts explicit `-Node` and `-NpmCli` paths when the default Node installation is older. See [packaging/README.md](packaging/README.md) for rootfs and Setup packaging commands. Frontend fixture tests use `.test-dist`; those fixtures are not part of the production assets. `test:web` launches the real built `bin/ucd.exe web` adapter, checks the production assets and actual service response, and shuts down its owned server. Set `UCD_CLI` to a different built CLI path when needed.
 
 ## Platform boundaries
 
@@ -210,7 +217,7 @@ Other current boundaries:
 - Confirmed 0.3.0 filtered-prune tests passed for Linux and Windows containers, images, networks, volumes and BuildKit cache. The Windows cache case removed a single 0-byte record. Tests used owned fixtures and checked preservation of original resources; they do not qualify unfiltered or broader destructive pruning.
 - Windows Docker requires a stopped container for commit. The VM daemon also rejected filesystem diff on a running Windows container; stop it before attempting that operation. The native Windows daemon rejected container filesystem export even for a stopped container; the UI disables that operation for Windows. Image save and load are separate operations.
 - CPU, memory and volume size values are displayed only when the engine reports usable statistics. An unavailable statistic is not presented as zero.
-- Automatic online update discovery is not implemented; application updates are supplied as MSI packages.
+- Automatic online update discovery is not implemented; application updates are supplied through the Setup executable.
 
 ## License
 
