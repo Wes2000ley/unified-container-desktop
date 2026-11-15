@@ -82,8 +82,12 @@ func TestResolveShareDirectoryAllowsDedicatedSharesSubdirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved != path {
-		t.Fatalf("resolved %q, want %q", resolved, path)
+	want, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved != want {
+		t.Fatalf("resolved %q, want %q", resolved, want)
 	}
 }
 

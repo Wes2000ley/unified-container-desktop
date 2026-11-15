@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	osexec "os/exec"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,7 @@ func TestDockerRelayBrokerPreservesImmediateExecOutput(t *testing.T) {
 	const marker = "UCD_EXEC_MARKER\n"
 	daemonEOF := make(chan struct{})
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("fake exec daemon received %s %s", r.Method, r.URL.RequestURI())
 		if r.Method != http.MethodPost || r.URL.Path != "/v1.45/exec/test-exec/start" {
 			t.Errorf("fake daemon request = %s %s", r.Method, r.URL.RequestURI())
 			return
@@ -80,6 +82,9 @@ func TestDockerRelayBrokerPreservesImmediateExecOutput(t *testing.T) {
 	defer client.Close()
 	response, err := client.ExecAttach(ctx, "test-exec", dockerclient.ExecAttachOptions{})
 	if err != nil {
+		var stacks bytes.Buffer
+		_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
+		t.Logf("broker principal calls: %d\n%s", principalCalls.Load(), &stacks)
 		t.Fatalf("attach to fake exec: %v", err)
 	}
 	defer response.Close()

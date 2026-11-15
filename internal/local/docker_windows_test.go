@@ -223,11 +223,25 @@ func TestDockerPipeDACLChecksEffectiveToken(t *testing.T) {
 	type genericMapping struct{ Read, Write, Execute, All uint32 }
 	mapping := genericMapping{Read: 0x00120089, Write: 0x00120116, Execute: 0x001200a0, All: 0x001f01ff}
 	accessCheck := windows.NewLazySystemDLL("advapi32.dll").NewProc("AccessCheck")
+	mapGenericMask := windows.NewLazySystemDLL("advapi32.dll").NewProc("MapGenericMask")
 	check := func(descriptor string) bool {
 		t.Helper()
 		sd, err := windows.SecurityDescriptorFromString("O:SYG:SY" + descriptor)
 		if err != nil {
 			t.Fatal(err)
+		}
+		// Object creation maps generic ACE rights to file rights. This descriptor
+		// has not been attached to a pipe, so perform that mapping for AccessCheck.
+		dacl, _, err := sd.DACL()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := uint32(0); i < uint32(dacl.AceCount); i++ {
+			var ace *windows.ACCESS_ALLOWED_ACE
+			if err := windows.GetAce(dacl, i, &ace); err != nil {
+				t.Fatal(err)
+			}
+			mapGenericMask.Call(uintptr(unsafe.Pointer(&ace.Mask)), uintptr(unsafe.Pointer(&mapping)))
 		}
 		var privileges [1024]byte
 		size := uint32(len(privileges))
@@ -240,6 +254,9 @@ func TestDockerPipeDACLChecksEffectiveToken(t *testing.T) {
 			t.Fatalf("AccessCheck: %v", err)
 		}
 		return allowed != 0
+	}
+	if !check("D:P(A;;GA;;;" + user.User.Sid.String() + ")") {
+		t.Fatal("AccessCheck rejected a generic all-access ACE for the current user")
 	}
 	adminSID, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
