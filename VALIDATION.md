@@ -16,6 +16,13 @@ test now compares against the canonical path; GitHub's `RUNNER~1` short path and
 `runneradmin` long path identify the same directory. No production path boundary
 was relaxed. Original failed CI/build logs are retained locally.
 
+The first remote 100-run check at `4394baf` also exposed a fixture protocol error:
+the immediate-output fake daemon did not consume the exec-start POST body before
+hijacking and closing TCP. It now consumes that body as Docker does, while still
+exiting immediately after writing its output. Marker, EOF and authentication
+assertions remain unchanged. That failed trial is retained; the repeated check
+is still required, with fail-fast reporting rather than retries.
+
 - Source `70f636a3de917375e07c1b39bcf525734afce41a` passed
   [GitHub CI](https://github.com/Wes2000ley/unified-container-desktop/actions/runs/43677966185):
   frontend typecheck/lint/59 component tests, production build/audit, 21 fixture

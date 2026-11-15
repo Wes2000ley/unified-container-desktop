@@ -42,6 +42,12 @@ func TestDockerRelayBrokerPreservesImmediateExecOutput(t *testing.T) {
 			t.Errorf("fake daemon upgrade = %q, want tcp", r.Header.Get("Upgrade"))
 			return
 		}
+		// Docker consumes the exec-start JSON before upgrading. Closing with
+		// unread request bytes can reset TCP instead of ending the output stream.
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Errorf("read fake exec-start request: %v", err)
+			return
+		}
 		conn, rw, err := w.(http.Hijacker).Hijack()
 		if err != nil {
 			t.Errorf("hijack fake daemon response: %v", err)
