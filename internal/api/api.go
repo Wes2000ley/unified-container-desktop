@@ -15,7 +15,7 @@ const (
 	PipeName      = `\\.\pipe\UnifiedContainerDesktop`
 	ServiceName   = "UnifiedContainerDesktop"
 	OperatorGroup = "Container Operators"
-	Version       = "0.4.8"
+	Version       = "0.4.9"
 )
 
 type Request struct {

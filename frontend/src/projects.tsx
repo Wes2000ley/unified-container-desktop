@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { call, operationErrors } from './api';
@@ -173,14 +174,14 @@ export function Projects({
         description="Manage Windows and Linux Compose files as one application."
       >
         <button className="button secondary" onClick={list.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         <button
           className="button primary"
           disabled={!canOperate}
           onClick={() => setForm('new')}
         >
-          ＋ &nbsp;New project
+          <Icon name="plus" size={16} /> New project
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />
@@ -196,7 +197,9 @@ export function Projects({
         {list.data?.map((project) => (
           <article className="panel project-card" key={project.id}>
             <div className="project-top">
-              <div className="project-mark">▧</div>
+              <div className="project-mark">
+                <Icon name="projects" size={23} />
+              </div>
               <div className="grow">
                 <h2>{project.name}</h2>
                 <div className="muted small">

@@ -15,6 +15,7 @@ import { Storage } from '../storage';
 import { Registry } from '../registry';
 import { useData } from '../use-data';
 import { usePreferences } from '../preferences';
+import { Icon } from '../icon';
 
 type Page =
   | 'dashboard'
@@ -26,16 +27,16 @@ type Page =
   | 'storage'
   | 'registry'
   | 'settings';
-const nav: { id: Page; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◫' },
-  { id: 'projects', label: 'Projects', icon: '▧' },
-  { id: 'containers', label: 'Containers', icon: '▣' },
-  { id: 'images', label: 'Images', icon: '◈' },
-  { id: 'volumes', label: 'Volumes', icon: '▤' },
-  { id: 'networks', label: 'Networks', icon: '⬡' },
-  { id: 'storage', label: 'Storage', icon: '▥' },
-  { id: 'registry', label: 'Registries', icon: '⇅' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+const nav: { id: Page; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'containers', label: 'Containers' },
+  { id: 'images', label: 'Images' },
+  { id: 'volumes', label: 'Volumes' },
+  { id: 'networks', label: 'Networks' },
+  { id: 'storage', label: 'Storage' },
+  { id: 'registry', label: 'Registries' },
+  { id: 'settings', label: 'Settings' },
 ];
 const loadIdentity = () =>
   call<{ settings: SettingsData; principal: Principal }>('system.settings');
@@ -128,8 +129,10 @@ export function App() {
             <img src="/ucd-icon.svg" alt="" aria-hidden="true" />
           </div>
           <div>
-            <strong>Unified</strong>
-            <span>CONTAINER DESKTOP</span>
+            <strong>
+              Unified<span className="brand-edition">UCD</span>
+            </strong>
+            <span>Container Desktop</span>
           </div>
         </div>
         <div className="sidebar-label">WORKSPACE</div>
@@ -142,7 +145,7 @@ export function App() {
               onClick={() => navigate(item.id)}
             >
               <span className="nav-icon" aria-hidden="true">
-                {item.icon}
+                <Icon name={item.id} />
               </span>
               {item.label}
             </button>
@@ -156,7 +159,7 @@ export function App() {
               onClick={() => navigate(item.id)}
             >
               <span className="nav-icon" aria-hidden="true">
-                {item.icon}
+                <Icon name={item.id} />
               </span>
               {item.label}
             </button>
@@ -182,7 +185,7 @@ export function App() {
       <div className="workspace">
         <header className="appbar">
           <div className="breadcrumbs">
-            <span>WORKSPACE</span>
+            <span>Local workspace</span>
             <span className="slash">/</span>
             <strong>{nav.find((item) => item.id === page)?.label}</strong>
           </div>
@@ -228,7 +231,11 @@ export function App() {
             </div>
           )}
           {page === 'dashboard' && (
-            <Dashboard revision={revision} admin={admin} />
+            <Dashboard
+              revision={revision}
+              admin={admin}
+              onNavigate={navigate}
+            />
           )}
           {page === 'projects' && (
             <Projects revision={revision} canOperate={canOperate} />

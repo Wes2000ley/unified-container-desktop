@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { call } from './api';
@@ -61,84 +62,86 @@ export function Registry({ canOperate }: { canOperate: boolean }) {
         description="One sign-in powers image pulls and pushes from both engines through the GUI and Docker CLI."
       >
         <button className="button secondary" onClick={logins.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />
-      <section className="panel resource-section">
-        <h2>Configured sign-ins</h2>
-        <LoadState {...logins} retry={logins.refresh} />
-        {!logins.loading && !logins.error && logins.data?.length === 0 ? (
-          <Empty title="No registry sign-ins" />
-        ) : (
-          <div className="simple-list">
-            {!logins.loading &&
-              !logins.error &&
-              logins.data?.map((entry) => (
-                <div key={entry.server}>
-                  <span>
-                    <strong>{entry.server || 'Docker Hub'}</strong>
-                    <span className="subline">{entry.username}</span>
-                  </span>
-                  <button
-                    className="table-action danger-text"
-                    disabled={!canOperate || !!op.pending}
-                    onClick={() => setLogout(entry)}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              ))}
+      <div className="registry-layout">
+        <section className="panel resource-section">
+          <h2>Configured sign-ins</h2>
+          <LoadState {...logins} retry={logins.refresh} />
+          {!logins.loading && !logins.error && logins.data?.length === 0 ? (
+            <Empty title="No registry sign-ins" />
+          ) : (
+            <div className="simple-list">
+              {!logins.loading &&
+                !logins.error &&
+                logins.data?.map((entry) => (
+                  <div key={entry.server}>
+                    <span>
+                      <strong>{entry.server || 'Docker Hub'}</strong>
+                      <span className="subline">{entry.username}</span>
+                    </span>
+                    <button
+                      className="table-action danger-text"
+                      disabled={!canOperate || !!op.pending}
+                      onClick={() => setLogout(entry)}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </section>
+        <section className="panel resource-section">
+          <div className="panel-heading">
+            <div>
+              <h2>Sign in</h2>
+              <p>Leave server blank for Docker Hub.</p>
+            </div>
           </div>
-        )}
-      </section>
-      <section className="panel resource-section">
-        <div className="panel-heading">
-          <div>
-            <h2>Sign in</h2>
-            <p>Leave server blank for Docker Hub.</p>
-          </div>
-        </div>
-        <form className="form-stack" onSubmit={(event) => void login(event)}>
-          <label>
-            Registry server
-            <input
-              value={server}
-              onChange={(event) => setServer(event.target.value)}
-              placeholder="registry.example.com"
-            />
-          </label>
-          <div className="form-grid">
+          <form className="form-stack" onSubmit={(event) => void login(event)}>
             <label>
-              Username
+              Registry server
               <input
-                required
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                value={server}
+                onChange={(event) => setServer(event.target.value)}
+                placeholder="registry.example.com"
               />
             </label>
-            <label>
-              Password or token
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-          </div>
-          <div>
-            <button
-              className="button primary"
-              disabled={!canOperate || !!op.pending}
-            >
-              Sign in
-            </button>
-          </div>
-        </form>
-      </section>
+            <div className="form-grid">
+              <label>
+                Username
+                <input
+                  required
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </label>
+              <label>
+                Password or token
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+            </div>
+            <div>
+              <button
+                className="button primary"
+                disabled={!canOperate || !!op.pending}
+              >
+                Sign in
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
       {logout && (
         <Confirm
           title={`Sign out of ${logout.server || 'Docker Hub'}?`}

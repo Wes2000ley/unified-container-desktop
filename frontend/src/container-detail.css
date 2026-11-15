@@ -38,12 +38,12 @@
 }
 .detail-tabs button {
   border: 0;
-  border-bottom: 3px solid transparent;
-  padding: 12px 17px;
+  border-bottom: 2px solid transparent;
+  padding: 13px 18px;
   color: var(--muted);
   background: transparent;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
 }
 .detail-tabs button:hover {
   color: var(--text);

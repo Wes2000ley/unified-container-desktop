@@ -2,6 +2,74 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 
+test('keeps settings drafts while switching categories and supports keyboard navigation', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page
+    .getByRole('button', { name: 'View containers', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Containers', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Clear selection', { exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByLabel('Select web-service', { exact: true }).check();
+  await expect(
+    page.getByRole('button', { name: 'Clear selection' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Clear selection' }).click();
+  await expect(
+    page.getByLabel('Select web-service', { exact: true }),
+  ).not.toBeChecked();
+  await page.screenshot({
+    path: 'test-results/containers.png',
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Refresh data every').selectOption('15');
+  const sections = page.getByRole('navigation', { name: 'Settings sections' });
+  await sections.getByRole('button', { name: 'Proxies', exact: true }).click();
+  await page
+    .getByLabel('Docker proxy HTTP URL')
+    .fill('http://draft.example:8080');
+  for (const name of [
+    'Resources',
+    'File sharing',
+    'Network',
+    'Access',
+    'Activity',
+    'General',
+  ]) {
+    await sections.getByRole('button', { name, exact: true }).click();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await expect(page.getByLabel('Refresh data every')).toHaveValue('15');
+  const proxies = sections.getByRole('button', {
+    name: 'Proxies',
+    exact: true,
+  });
+  await proxies.focus();
+  await page.keyboard.press('Enter');
+  await expect(proxies).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByLabel('Docker proxy HTTP URL')).toHaveValue(
+    'http://draft.example:8080',
+  );
+  await page.screenshot({ path: 'test-results/proxies.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 800 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
+
 test('renders workspace, retains failed pull input, and confirms volume removal', async ({
   page,
 }) => {
@@ -57,9 +125,11 @@ test('configures interface preferences and Windows desktop behavior', async ({
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Recent events' }),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'General', exact: true }).click();
   await page.getByLabel('Refresh data every').selectOption('15');
   await page.getByLabel('Default log lines').selectOption('1000');
   await page

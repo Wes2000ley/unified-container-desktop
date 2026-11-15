@@ -813,6 +813,7 @@ it('saves distinct daemon and container proxy settings through machine settings'
   bridge.mockImplementation(mockSettings);
   const user = userEvent.setup();
   render(<Settings revision={0} admin events={[]} />);
+  await user.click(screen.getByRole('button', { name: 'Proxies' }));
   await screen.findByRole('heading', { name: 'Proxies and registry mirrors' });
   expect(
     screen.getByRole('group', { name: 'Docker engine traffic' }),
@@ -878,6 +879,7 @@ it('saves Linux network defaults and applies Resource saver without restarting t
   bridge.mockImplementation(mockSettings);
   const user = userEvent.setup();
   render(<Settings revision={0} admin events={[]} />);
+  await user.click(screen.getByRole('button', { name: 'Network' }));
   expect(
     await screen.findByText(
       /Default published port binding applies to newly created standalone containers and managed Compose on both engines\./,
@@ -936,6 +938,7 @@ it('saves Linux network defaults and applies Resource saver without restarting t
       'Saved. The Linux engine needs a restart to apply bridge and DNS defaults. Existing networks are unchanged.',
     ),
   ).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Resources' }));
   await user.click(screen.getByLabelText('Enable Resource saver'));
   const slider = screen.getByRole('slider', {
     name: 'Resource saver threshold (seconds)',
@@ -978,6 +981,7 @@ it('shows when the Linux engine is sleeping in Resource saver', async () => {
     },
   );
   render(<Settings revision={0} admin events={[]} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Resources' }));
   expect(await screen.findByText('Sleeping')).toBeInTheDocument();
   expect(
     screen.getByText(
@@ -990,6 +994,7 @@ it('creates a virtual file share from an administrator-approved local directory'
   bridge.mockImplementation(mockSettings);
   const user = userEvent.setup();
   render(<Settings revision={0} admin events={[]} />);
+  await user.click(screen.getByRole('button', { name: 'File sharing' }));
   await user.click(
     await screen.findByRole('button', { name: /Add virtual file share/ }),
   );

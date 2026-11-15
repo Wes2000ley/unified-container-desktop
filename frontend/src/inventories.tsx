@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useState } from 'react';
 import { bytes, call, errorText } from './api';
 import type { Container, ListResult } from './api';
@@ -111,14 +112,14 @@ export function Containers({
         description="Inspect and control containers across both engines."
       >
         <button className="button secondary" onClick={list.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         <button
           className="button primary"
           disabled={!canOperate}
           onClick={() => setCreate(true)}
         >
-          ＋ &nbsp;Create container
+          <Icon name="plus" size={16} /> Create container
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />
@@ -127,8 +128,8 @@ export function Containers({
           <div>
             <h2>All containers</h2>
             <p>
-              {items.length} shown · {selectedItems.length} selected across
-              filters
+              {items.length} {items.length === 1 ? 'container' : 'containers'}{' '}
+              shown across {engine || 'both engines'}
             </p>
           </div>
           <div className="filters">
@@ -149,31 +150,39 @@ export function Containers({
             </select>
           </div>
         </div>
-        <div className="resource-bulk">
-          <span>Selected: {selectedItems.length}</span>
-          {[
-            'start',
-            'stop',
-            'restart',
-            'pause',
-            'unpause',
-            'kill',
-            'remove',
-          ].map((name) => (
+        {selectedItems.length > 0 && (
+          <div className="resource-bulk">
+            <strong>{selectedItems.length} selected</strong>
+            {[
+              'start',
+              'stop',
+              'restart',
+              'pause',
+              'unpause',
+              'kill',
+              'remove',
+            ].map((name) => (
+              <button
+                key={name}
+                className={
+                  name === 'kill' || name === 'remove'
+                    ? 'button quiet danger-text'
+                    : 'button quiet'
+                }
+                disabled={!canOperate || !selectedItems.length || !!op.pending}
+                onClick={() => request(name, selectedItems)}
+              >
+                {name.charAt(0).toUpperCase() + name.slice(1)}
+              </button>
+            ))}
             <button
-              key={name}
-              className={
-                name === 'kill' || name === 'remove'
-                  ? 'button quiet danger-text'
-                  : 'button quiet'
-              }
-              disabled={!canOperate || !selectedItems.length || !!op.pending}
-              onClick={() => request(name, selectedItems)}
+              className="text-button"
+              onClick={() => setSelected(new Set())}
             >
-              {name.charAt(0).toUpperCase() + name.slice(1)}
+              Clear selection
             </button>
-          ))}
-        </div>
+          </div>
+        )}
         <LoadState {...list} retry={list.refresh} />
         <InventoryErrors errors={list.data?.errors} />
         {list.data && items.length === 0 ? (

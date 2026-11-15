@@ -178,6 +178,7 @@ async function openSettings(page: Page) {
   await page.goto('/');
   await expect(page.getByText('Controller connected')).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Proxies', exact: true }).click();
   await expect(
     page.getByRole('heading', {
       name: 'Proxies and registry mirrors',
@@ -253,6 +254,7 @@ test('saves network defaults when the controller omits its empty bridge subnet',
   const transport = await useWebTransport(page);
   await openSettings(page);
 
+  await page.getByRole('button', { name: 'Network', exact: true }).click();
   await page.getByLabel('Default networking mode').selectOption('dual-stack');
   const form = page.locator('form').filter({
     has: page.getByRole('button', { name: 'Save network defaults' }),

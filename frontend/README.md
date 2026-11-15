@@ -2,6 +2,8 @@
 
 React and TypeScript interface for the Wails 3 desktop application. The production interface calls the `main.Bridge.Call` service and requires the local controller; it does not simulate engine data.
 
+Desktop and browser clients use the same charcoal workspace, SVG icons, inventory tables and container detail views. The dashboard shows real engine status and container measurements, with partial measurements identified explicitly. Settings are organized into General, Resources, File sharing, Proxies, Network, Access and Activity. Category changes keep forms mounted so unsaved values survive; saving still uses the existing service permissions and configuration operations. Recent events remain paginated within Activity.
+
 Use Node.js 24.15 or newer and run from this directory:
 
 ```powershell

@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { bytes, call } from './api';
@@ -96,7 +97,7 @@ export function Volumes({
         description="Inspect and manage persistent storage across both engines."
       >
         <button className="button secondary" onClick={list.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         <button
           className="button primary"
@@ -106,7 +107,7 @@ export function Volumes({
             setCreate(true);
           }}
         >
-          ＋ &nbsp;Create volume
+          <Icon name="plus" size={16} /> Create volume
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />

@@ -30,6 +30,18 @@ import type { DesktopPreferences } from './desktop-preferences';
 import { savePreferences, usePreferences } from './preferences';
 import type { UserPreferences } from './preferences';
 import './settings.css';
+import { Icon } from './icon';
+import type { IconName } from './icon';
+
+const sections: { id: string; label: string; icon: IconName }[] = [
+  { id: 'general', label: 'General', icon: 'settings' },
+  { id: 'resources', label: 'Resources', icon: 'cpu' },
+  { id: 'sharing', label: 'File sharing', icon: 'volumes' },
+  { id: 'proxies', label: 'Proxies', icon: 'registry' },
+  { id: 'network', label: 'Network', icon: 'networks' },
+  { id: 'access', label: 'Access', icon: 'projects' },
+  { id: 'activity', label: 'Activity', icon: 'dashboard' },
+];
 
 const loadSettings = () =>
   call<{ settings: SettingsData; principal: Principal }>('system.settings');
@@ -54,6 +66,7 @@ export function Settings({
   const shares = useData(loadShares, revision);
   const op = useOperation();
   const [output, setOutput] = useState<unknown>();
+  const [section, setSection] = useState('general');
   const [eventPage, setEventPage] = useState(0);
   const [eventPageSize, setEventPageSize] = useState(10);
   const newestFirst = [...events].reverse();
@@ -85,7 +98,7 @@ export function Settings({
             shares.refresh();
           }}
         >
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         <button
           className="button primary"
@@ -97,180 +110,221 @@ export function Settings({
       </SectionTitle>
       <Feedback error={op.error} pending={op.pending} />
       <LoadState {...settings} retry={settings.refresh} />
-      <div className="settings-grid">
-        <InterfacePreferences />
-        <DesktopPreferencesPanel />
-        {settings.data && (
-          <section className="panel settings-proxy-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Proxies and registry mirrors</h2>
-                <p>Shared by the machine's Linux and Windows engines</p>
-              </div>
-            </div>
-            <ConfigForm
-              key={`${JSON.stringify(settings.data.settings.dockerProxy)}:${JSON.stringify(settings.data.settings.containersProxy)}:${JSON.stringify(settings.data.settings.registryMirrors)}`}
-              settings={settings.data.settings}
-              admin={admin}
-            />
-          </section>
-        )}
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Linux WSL resources</h2>
-              <p>Dedicated service-owned distribution</p>
-            </div>
-            {wsl.data && (
-              <Badge tone={wsl.data.running ? 'good' : 'neutral'}>
-                {wsl.data.running ? 'Running' : 'Stopped'}
-              </Badge>
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {sections.map((item) => (
+            <button
+              key={item.id}
+              aria-current={section === item.id ? 'page' : undefined}
+              onClick={() => setSection(item.id)}
+            >
+              <Icon name={item.icon} size={17} />
+              {item.label}
+            </button>
+          ))}
+          <p>Changes to machine settings apply to every authorized user.</p>
+        </nav>
+        <div className="settings-content">
+          <div className="settings-section" hidden={section !== 'general'}>
+            <InterfacePreferences />
+            <DesktopPreferencesPanel />
+          </div>
+          <div className="settings-section" hidden={section !== 'proxies'}>
+            {settings.data && (
+              <section className="panel settings-proxy-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Proxies and registry mirrors</h2>
+                    <p>Shared by the machine's Linux and Windows engines</p>
+                  </div>
+                </div>
+                <ConfigForm
+                  key={`${JSON.stringify(settings.data.settings.dockerProxy)}:${JSON.stringify(settings.data.settings.containersProxy)}:${JSON.stringify(settings.data.settings.registryMirrors)}`}
+                  settings={settings.data.settings}
+                  admin={admin}
+                />
+              </section>
             )}
           </div>
-          <LoadState {...wsl} retry={wsl.refresh} />
-          {wsl.data && (
-            <WSLForm status={wsl.data} admin={admin} saved={wsl.refresh} />
-          )}
-        </section>
-        {settings.data && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Resource saver</h2>
-                <p>Reduce idle Linux engine resource use</p>
-              </div>
-            </div>
-            <ResourceSaverForm
-              key={JSON.stringify(settings.data.settings.resourceSaver)}
-              settings={settings.data.settings}
-              admin={admin}
-              engine={linuxEngine.data}
-              saved={linuxEngine.refresh}
-            />
-          </section>
-        )}
-        {settings.data && (
-          <section className="panel settings-network-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Network defaults</h2>
-                <p>
-                  Port binding applies to both engines; other defaults are
-                  Linux-only
-                </p>
-              </div>
-            </div>
-            <NetworkForm
-              key={JSON.stringify(settings.data.settings.network)}
-              settings={settings.data.settings}
-              admin={admin}
-            />
-          </section>
-        )}
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Container operators</h2>
-              <p>Windows accounts allowed to manage containers</p>
-            </div>
-          </div>
-          <LoadState {...operators} retry={operators.refresh} />
-          {operators.data && (
-            <Operators
-              items={operators.data}
-              admin={admin}
-              saved={operators.refresh}
-            />
-          )}
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Virtual file shares</h2>
-              <p>Directories available to Linux container bind mounts</p>
-            </div>
-          </div>
-          <LoadState {...shares} retry={shares.refresh} />
-          {shares.data && (
-            <Shares items={shares.data} admin={admin} saved={shares.refresh} />
-          )}
-        </section>
-      </div>
-      <section className="panel events-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Recent events</h2>
-            <p>Controller and operation activity for this session</p>
-          </div>
-          {events.length > 0 && (
-            <label className="events-page-size">
-              Rows
-              <select
-                value={eventPageSize}
-                onChange={(event) => {
-                  setEventPageSize(Number(event.target.value));
-                  setEventPage(0);
-                }}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-          )}
-        </div>
-        {events.length === 0 ? (
-          <Empty title="No events reported" />
-        ) : (
-          <>
-            <div className="event-list">
-              {pageEvents.map((event) => (
-                <div className="event-row" key={event.sequence}>
-                  <span className="event-dot" />
-                  <span className="event-time">
-                    {new Date(event.time).toLocaleString()}
-                  </span>
-                  <span>
-                    <strong>{event.type}</strong>{' '}
-                    {event.engine && (
-                      <span className="engine-tag">{event.engine}</span>
-                    )}
-                    <span className="subline">{event.message}</span>
-                  </span>
+          <div className="settings-section" hidden={section !== 'resources'}>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Linux WSL resources</h2>
+                  <p>Dedicated service-owned distribution</p>
                 </div>
-              ))}
-            </div>
-            <nav className="events-pagination" aria-label="Recent event pages">
-              <span>
-                Showing {currentPage * eventPageSize + 1}–
-                {Math.min((currentPage + 1) * eventPageSize, events.length)} of{' '}
-                {events.length}
-              </span>
-              <div>
-                <button
-                  className="button secondary"
-                  disabled={currentPage === 0}
-                  onClick={() => setEventPage((page) => Math.max(0, page - 1))}
-                >
-                  Previous
-                </button>
-                <span aria-live="polite">
-                  Page {currentPage + 1} of {pageCount}
-                </span>
-                <button
-                  className="button secondary"
-                  disabled={currentPage >= pageCount - 1}
-                  onClick={() =>
-                    setEventPage((page) => Math.min(pageCount - 1, page + 1))
-                  }
-                >
-                  Next
-                </button>
+                {wsl.data && (
+                  <Badge tone={wsl.data.running ? 'good' : 'neutral'}>
+                    {wsl.data.running ? 'Running' : 'Stopped'}
+                  </Badge>
+                )}
               </div>
-            </nav>
-          </>
-        )}
-      </section>
+              <LoadState {...wsl} retry={wsl.refresh} />
+              {wsl.data && (
+                <WSLForm status={wsl.data} admin={admin} saved={wsl.refresh} />
+              )}
+            </section>
+            {settings.data && (
+              <section className="panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Resource saver</h2>
+                    <p>Reduce idle Linux engine resource use</p>
+                  </div>
+                </div>
+                <ResourceSaverForm
+                  key={JSON.stringify(settings.data.settings.resourceSaver)}
+                  settings={settings.data.settings}
+                  admin={admin}
+                  engine={linuxEngine.data}
+                  saved={linuxEngine.refresh}
+                />
+              </section>
+            )}
+          </div>
+          <div className="settings-section" hidden={section !== 'network'}>
+            {settings.data && (
+              <section className="panel settings-network-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Network defaults</h2>
+                    <p>
+                      Port binding applies to both engines; other defaults are
+                      Linux-only
+                    </p>
+                  </div>
+                </div>
+                <NetworkForm
+                  key={JSON.stringify(settings.data.settings.network)}
+                  settings={settings.data.settings}
+                  admin={admin}
+                />
+              </section>
+            )}
+          </div>
+          <div className="settings-section" hidden={section !== 'access'}>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Container operators</h2>
+                  <p>Windows accounts allowed to manage containers</p>
+                </div>
+              </div>
+              <LoadState {...operators} retry={operators.refresh} />
+              {operators.data && (
+                <Operators
+                  items={operators.data}
+                  admin={admin}
+                  saved={operators.refresh}
+                />
+              )}
+            </section>
+          </div>
+          <div className="settings-section" hidden={section !== 'sharing'}>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Virtual file shares</h2>
+                  <p>Directories available to Linux container bind mounts</p>
+                </div>
+              </div>
+              <LoadState {...shares} retry={shares.refresh} />
+              {shares.data && (
+                <Shares
+                  items={shares.data}
+                  admin={admin}
+                  saved={shares.refresh}
+                />
+              )}
+            </section>
+          </div>
+          <section
+            className="panel events-panel settings-section"
+            hidden={section !== 'activity'}
+          >
+            <div className="panel-heading">
+              <div>
+                <h2>Recent events</h2>
+                <p>Controller and operation activity for this session</p>
+              </div>
+              {events.length > 0 && (
+                <label className="events-page-size">
+                  Rows
+                  <select
+                    value={eventPageSize}
+                    onChange={(event) => {
+                      setEventPageSize(Number(event.target.value));
+                      setEventPage(0);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              )}
+            </div>
+            {events.length === 0 ? (
+              <Empty title="No events reported" />
+            ) : (
+              <>
+                <div className="event-list">
+                  {pageEvents.map((event) => (
+                    <div className="event-row" key={event.sequence}>
+                      <span className="event-dot" />
+                      <span className="event-time">
+                        {new Date(event.time).toLocaleString()}
+                      </span>
+                      <span>
+                        <strong>{event.type}</strong>{' '}
+                        {event.engine && (
+                          <span className="engine-tag">{event.engine}</span>
+                        )}
+                        <span className="subline">{event.message}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <nav
+                  className="events-pagination"
+                  aria-label="Recent event pages"
+                >
+                  <span>
+                    Showing {currentPage * eventPageSize + 1}–
+                    {Math.min((currentPage + 1) * eventPageSize, events.length)}{' '}
+                    of {events.length}
+                  </span>
+                  <div>
+                    <button
+                      className="button secondary"
+                      disabled={currentPage === 0}
+                      onClick={() =>
+                        setEventPage((page) => Math.max(0, page - 1))
+                      }
+                    >
+                      Previous
+                    </button>
+                    <span aria-live="polite">
+                      Page {currentPage + 1} of {pageCount}
+                    </span>
+                    <button
+                      className="button secondary"
+                      disabled={currentPage >= pageCount - 1}
+                      onClick={() =>
+                        setEventPage((page) =>
+                          Math.min(pageCount - 1, page + 1),
+                        )
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                </nav>
+              </>
+            )}
+          </section>
+        </div>
+      </div>
       {output !== undefined && (
         <OutputModal
           title="System diagnostics"
@@ -1187,7 +1241,7 @@ function Shares({
         disabled={!admin}
         onClick={() => setOpen(true)}
       >
-        ＋ &nbsp;Add virtual file share
+        <Icon name="plus" size={16} /> Add virtual file share
       </button>
       {open && (
         <Modal title="Add virtual file share" close={() => setOpen(false)}>

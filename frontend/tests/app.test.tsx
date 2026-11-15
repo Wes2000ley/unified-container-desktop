@@ -141,6 +141,7 @@ it('reads new events after the controller restarts with a new epoch', async () =
   render(<App />);
   await screen.findByText('Controller connected');
   await user.click(screen.getByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('button', { name: 'Activity' }));
   expect(await screen.findByText('before restart')).toBeInTheDocument();
   setFakeEvents('epoch-b', [
     {
@@ -174,6 +175,7 @@ it('paginates Recent events and lets the operator choose a larger page', async (
   render(<App />);
   await screen.findByText('Controller connected');
   await user.click(screen.getByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('button', { name: 'Activity' }));
   expect(await screen.findByText('Showing 1–10 of 23')).toBeInTheDocument();
   expect(screen.getByText('event 23')).toBeInTheDocument();
   expect(screen.queryByText('event 13')).not.toBeInTheDocument();

@@ -38,8 +38,64 @@
 .settings-fieldset p {
   margin: 0;
 }
-.settings-grid {
+.settings-layout {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 25px;
   align-items: start;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 20px;
+}
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  padding: 11px 12px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+.settings-nav button:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.settings-nav button[aria-current] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.settings-nav p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 22px 12px;
+}
+.settings-content {
+  min-width: 0;
+}
+.settings-section {
+  display: grid;
+  gap: 18px;
+}
+.settings-section[hidden] {
+  display: none;
+}
+.settings-section > .panel > .panel-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.settings-section .form-stack {
+  gap: 20px;
+}
+.settings-section .settings-save-row {
+  padding-top: 7px;
 }
 .settings-proxy-panel,
 .settings-network-panel {

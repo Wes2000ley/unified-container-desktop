@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useCallback, useState } from 'react';
 import { bytes, call } from './api';
 import type { Engine } from './api';
@@ -111,7 +112,7 @@ export function Storage({
         description="Review disk usage and preview scoped cleanup on the selected engine."
       >
         <button className="button secondary" onClick={usage.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />

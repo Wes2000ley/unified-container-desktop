@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createTarPacker } from 'modern-tar';
@@ -254,7 +255,7 @@ export function Images({
         description="Build, transfer and manage images on each engine."
       >
         <button className="button secondary" onClick={list.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         {(['load', 'import', 'build', 'pull'] as const).map((name) => (
           <button

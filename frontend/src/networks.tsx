@@ -1,3 +1,4 @@
+import { Icon } from './icon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { call, errorText } from './api';
@@ -157,7 +158,7 @@ export function Networks({
         description="Inspect networks and connect containers on either engine."
       >
         <button className="button secondary" onClick={list.refresh}>
-          ↻ &nbsp;Refresh
+          <Icon name="refresh" size={16} /> Refresh
         </button>
         <button
           className="button primary"
@@ -167,7 +168,7 @@ export function Networks({
             setCreate(true);
           }}
         >
-          ＋ &nbsp;Create network
+          <Icon name="plus" size={16} /> Create network
         </button>
       </SectionTitle>
       <Feedback error={op.error} success={op.success} pending={op.pending} />
