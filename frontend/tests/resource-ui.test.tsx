@@ -794,7 +794,7 @@ it('uses one shared registry list and signs in and out without an engine selecto
       password: 'secret-token',
     },
   });
-  await user.click(screen.getByRole('button', { name: 'Sign out' }));
+  await user.click(await screen.findByRole('button', { name: 'Sign out' }));
   const dialog = screen.getByRole('dialog', {
     name: 'Sign out of registry.example?',
   });
