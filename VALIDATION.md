@@ -143,8 +143,8 @@ Final installed-bundle qualification (0.4.15 to 0.4.16):
 The initial GitHub CI run exposed an asynchronous registry-test race: sign-in
 refresh temporarily hides the list, but the test immediately queried Sign out.
 The test now awaits the refreshed control; its focused 17-test file passed.
-Production registry behavior was unchanged. Remote CI/build results are recorded
-with their exact source commits below when complete.
+Production registry behavior was unchanged. Remote CI/build references and the
+subsequent runtime fix are recorded in the 0.4.17 section above.
 
 The user explicitly declined another test VM. A fresh Windows installation,
 actual optional-feature/WSL installation, restart/resume, and bundle uninstall or
