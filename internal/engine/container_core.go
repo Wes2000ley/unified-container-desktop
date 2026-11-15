@@ -39,6 +39,7 @@ func (b *Backend) containerOperation(ctx context.Context, req api.Request) (any,
 			return nil, err
 		}
 		result, err := b.docker.ContainerCreate(ctx, client.ContainerCreateOptions{Config: p.Config, HostConfig: p.HostConfig, NetworkingConfig: p.NetworkingConfig, Name: p.Name})
+		result, err = b.finishContainerCreate(ctx, result, err, p.HostConfig)
 		if err != nil {
 			return nil, fmt.Errorf("create container: %w", err)
 		}
@@ -124,7 +125,16 @@ func (b *Backend) prepareContainerPorts(ctx context.Context, p *api.ContainerCre
 			return api.Fail("invalid_argument", "container uses reserved published port label")
 		}
 	}
+	if b.id == "linux" {
+		if _, exists := p.Config.Labels[linuxPortsLabel]; exists {
+			return api.Fail("invalid_argument", "container uses reserved Linux published port label")
+		}
+	}
 	if p.HostConfig == nil {
+		if b.id == "linux" {
+			clearInheritedLinuxPortLabel(p)
+			return nil
+		}
 		return nil
 	}
 	if p.HostConfig.PublishAllPorts {
@@ -170,6 +180,13 @@ func (b *Backend) prepareContainerPorts(ctx context.Context, p *api.ContainerCre
 	ports, err := api.ContainerPublishedPorts(*p)
 	if err != nil {
 		return err
+	}
+	if b.id == "linux" {
+		if len(ports) > 0 && linuxPortRelayEnabled(p.HostConfig) {
+			return prepareLinuxContainerPorts(p, ports)
+		}
+		clearInheritedLinuxPortLabel(p)
+		return nil
 	}
 	if b.id != "windows" {
 		return nil

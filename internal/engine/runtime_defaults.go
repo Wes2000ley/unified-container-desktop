@@ -213,7 +213,8 @@ func (c *composeDefaultsClient) ContainerCreate(ctx context.Context, options cli
 	if c.backend.id == "windows" {
 		if _, managedWindowsPorts := options.Config.Labels[windowsPortsLabel]; managedWindowsPorts {
 			// windowsRuntimeProject has already validated and transformed this metadata.
-			return c.APIClient.ContainerCreate(ctx, options)
+			result, err := c.APIClient.ContainerCreate(ctx, options)
+			return c.backend.finishContainerCreate(ctx, result, err, options.HostConfig)
 		}
 	}
 	params := api.ContainerCreateParams{
@@ -224,7 +225,8 @@ func (c *composeDefaultsClient) ContainerCreate(ctx context.Context, options cli
 		return client.ContainerCreateResult{}, err
 	}
 	options.Config, options.HostConfig = params.Config, params.HostConfig
-	return c.APIClient.ContainerCreate(ctx, options)
+	result, err := c.APIClient.ContainerCreate(ctx, options)
+	return c.backend.finishContainerCreate(ctx, result, err, options.HostConfig)
 }
 
 func (c *composeDefaultsClient) NetworkCreate(ctx context.Context, name string, options client.NetworkCreateOptions) (client.NetworkCreateResult, error) {

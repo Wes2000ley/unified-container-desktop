@@ -66,6 +66,7 @@ func TestNativeDockerCreateUsesMachineDefaults(t *testing.T) {
 		}
 		var got struct {
 			Env        []string
+			Labels     map[string]string
 			Future     bool
 			HostConfig struct {
 				FutureHost   bool
@@ -82,8 +83,14 @@ func TestNativeDockerCreateUsesMachineDefaults(t *testing.T) {
 		if !got.Future || !got.HostConfig.FutureHost {
 			t.Fatal("unknown Docker fields were dropped")
 		}
-		if got.HostConfig.PortBindings["80/tcp"][0].HostIP != "127.0.0.1" {
-			t.Fatalf("port exposure default lost: %s", data)
+		bindings := got.HostConfig.PortBindings["80/tcp"]
+		if len(bindings) != 2 || bindings[0].HostIP != "127.0.0.1" || bindings[0].HostPort != "0" ||
+			bindings[1].HostIP != "::1" || bindings[1].HostPort != "0" {
+			t.Fatalf("Linux relay binding = %#v", bindings)
+		}
+		ports, err := parseLinuxPortMetadata(got.Labels[linuxPortsLabel])
+		if err != nil || len(ports) != 1 || ports[0].HostIP != "127.0.0.1" || ports[0].Published != 18432 {
+			t.Fatalf("original Docker request metadata = %#v, %v", ports, err)
 		}
 		w.WriteHeader(http.StatusCreated)
 	}))

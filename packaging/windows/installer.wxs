@@ -7,6 +7,10 @@
     <Property Id="ARPPRODUCTICON" Value="UcdProductIcon" />
     <!-- Regular shortcuts must not trigger repair of service-only bootstrap files. -->
     <Property Id="DISABLEADVTSHORTCUTS" Value="1" />
+    <!-- All packaged files are program/bootstrap payload. Mutable settings,
+         credentials and engine data are outside MSI components. Replace even
+         an unversioned binary changed by a prior repair or diagnostic update. -->
+    <Property Id="REINSTALLMODE" Value="amus" />
     <Property Id="UCD_DOCKER_DESKTOP_MACHINE">
       <RegistrySearch Id="DockerDesktopMachineUninstall" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop" Name="DisplayName" Type="raw" />
     </Property>
@@ -40,11 +44,18 @@
     <CustomAction Id="RollbackUninstall" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
     <CustomAction Id="RollbackRestoreUpgrade" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action restore-services" Execute="rollback" Impersonate="no" Return="ignore" />
     <CustomAction Id="Provision" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action install" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RemovePublishedFirewall" Directory="System64Folder" ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]provision.ps1&quot; -Action firewall-remove" Execute="deferred" Impersonate="no" Return="check" />
+    <!-- Staged rules retain all administrator filters for uninstall rollback.
+         Commit runs after program files have been removed, so it is self-contained. -->
+    <CustomAction Id="CommitPublishedFirewall" Directory="System64Folder" Execute="commit" Impersonate="no" Return="ignore"
+      ExeCommand="WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -Command &quot;$ErrorActionPreference='Stop'; foreach($protocol in @('TCP','UDP')) { $rule=Get-NetFirewallRule -PolicyStore PersistentStore -Name ('UCD.PublishedPorts.'+$protocol+'.Removing') -ErrorAction SilentlyContinue; if($rule) { $app=$rule|Get-NetFirewallApplicationFilter; $svc=$rule|Get-NetFirewallServiceFilter; if($rule.Group -cne 'Unified Container Desktop' -or $app.Program -ine '[INSTALLFOLDER]controller.exe' -or $svc.Service -ine 'UnifiedContainerDesktop') { throw 'Unexpected staged UCD firewall rule owner' }; $rule|Remove-NetFirewallRule } }&quot;" />
     <InstallExecuteSequence>
       <!-- Recreate after old-product removal (6501), before finalization (6600). -->
       <CreateShortcuts Sequence="6550" />
       <Custom Action="RollbackRestoreUpgrade" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED OR (Installed AND NOT REMOVE~=&quot;ALL&quot;)" />
-      <Custom Action="RollbackUninstall" Before="StopServices" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="RollbackUninstall" Before="CommitPublishedFirewall" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="CommitPublishedFirewall" Before="RemovePublishedFirewall" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="RemovePublishedFirewall" Before="StopServices" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
       <Custom Action="RollbackFresh" After="InstallFiles" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
       <Custom Action="RollbackUpgrade" After="RollbackFresh" Condition="Installed OR WIX_UPGRADE_DETECTED" />
       <Custom Action="Provision" After="WriteRegistryValues" Condition="NOT REMOVE~=&quot;ALL&quot;" />

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"math/big"
@@ -24,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/moby/client"
 	"github.com/skyri/ucd/internal/api"
 )
 
@@ -202,6 +204,64 @@ func TestMutualTLSAndClientValidation(t *testing.T) {
 	}
 }
 
+func TestServiceDockerEventsUseMutualTLSAndPrivatePath(t *testing.T) {
+	backend := callerFunc(func(context.Context, api.Request) (any, error) { return "ready", nil })
+	s := startTestServer(t, backend, &api.EventBus{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || r.TLS.PeerCertificates[0].Subject.CommonName != controllerName {
+			t.Error("Docker event subscription lost authenticated controller identity")
+		}
+		if r.URL.Path == "/_ping" {
+			w.Header().Set("API-Version", "1.56")
+			w.Header().Set("OSType", "linux")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !strings.HasSuffix(r.URL.Path, "/events") {
+			t.Errorf("unexpected private Docker request %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{"Type":"container","Action":"start","Actor":{"ID":"fixture"},"timeNano":42}`)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	helper, err := NewClient(s.settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer helper.Close()
+	docker, err := helper.DockerClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream := docker.Events(ctx, client.EventsListOptions{})
+	select {
+	case event := <-stream.Messages:
+		if event.Action != "start" || event.Actor.ID != "fixture" {
+			t.Fatalf("unexpected event: %+v", event)
+		}
+	case err := <-stream.Err:
+		t.Fatalf("event subscription: %v", err)
+	case <-ctx.Done():
+		t.Fatal("authenticated event subscription timed out")
+	}
+	cancel()
+	select {
+	case <-stream.Err:
+	case <-time.After(5 * time.Second):
+		t.Fatal("event subscription did not stop")
+	}
+	if err := docker.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := helper.Call(context.Background(), api.Request{Method: "engine.status", Engine: "linux"}); err != nil {
+		t.Fatalf("closing Docker client closed helper: %v", err)
+	}
+}
+
 func TestClientWaitReadyUsesAuthenticatedHelper(t *testing.T) {
 	s := startTestServer(t, nil, &api.EventBus{})
 	client, err := NewClient(s.settings)
@@ -295,6 +355,21 @@ func TestComposeTransferAndMethodAuthorization(t *testing.T) {
 	}
 	if _, err := client.Call(context.Background(), api.Request{Method: "engine.configure"}); err != nil || forwarded.Method != "engine.configure" {
 		t.Fatalf("engine configuration call = %v; forwarded = %+v", err, forwarded)
+	}
+	hostRequest, _ := api.NewRequest("engine.internal.hostaliases", "linux", map[string]string{"hostIPv4": "192.0.2.10"})
+	if _, err := client.Call(context.Background(), hostRequest); err != nil || forwarded.Method != hostRequest.Method || !bytes.Equal(forwarded.Params, hostRequest.Params) {
+		t.Fatalf("authenticated host alias publication = %v; forwarded = %+v", err, forwarded)
+	}
+	for _, method := range []string{"engine.internal.portbindings", "engine.internal.portstate"} {
+		request, _ := api.NewRequest(method, "linux", api.LinuxPortBindings{Bindings: []api.LinuxPortBinding{}})
+		if _, err := client.Call(context.Background(), request); err != nil || forwarded.Method != method || !bytes.Equal(forwarded.Params, request.Params) {
+			t.Fatalf("authenticated published-port operation %s: %v; forwarded=%+v", method, err, forwarded)
+		}
+	}
+	forwarded = api.Request{}
+	_, err = client.Call(context.Background(), api.Request{Method: "engine.internal.unknown"})
+	if !errors.As(err, &apiErr) || apiErr.Code != "permission_denied" || forwarded.Method != "" {
+		t.Fatalf("unknown internal operation = %v; forwarded = %+v", err, forwarded)
 	}
 	eventRequest, _ := api.NewRequest("system.events", "linux", api.EventsParams{After: 1, Epoch: events.Batch(0, "").Epoch})
 	result, err := client.Call(context.Background(), eventRequest)

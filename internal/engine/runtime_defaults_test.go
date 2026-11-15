@@ -148,7 +148,7 @@ func TestComposeContainerCreateTrustsManagedWindowsPorts(t *testing.T) {
 		t.Fatal("Windows Compose port metadata was not generated")
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(windowsAliasFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/_ping" {
 			w.Header().Set("API-Version", "1.45")
 			w.Header().Set("OSType", "windows")
@@ -170,12 +170,13 @@ func TestComposeContainerCreateTrustsManagedWindowsPorts(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"Id":"compose-container"}`))
-	}))
+	}, nil))
 	defer server.Close()
 	b, err := New("windows", "tcp://"+strings.TrimPrefix(server.URL, "http://"), t.TempDir(), &api.EventBus{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.hostIPv4 = testHostIPv4
 	defer b.Close()
 
 	composeClient := &composeDefaultsClient{APIClient: b.docker, backend: b}

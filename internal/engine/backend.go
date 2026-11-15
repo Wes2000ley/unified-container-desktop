@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,25 +29,30 @@ import (
 
 // Backend owns a connection to one machine-owned Docker Engine.
 type Backend struct {
-	id              string
-	dataRoot        string
-	docker          *client.Client
-	compose         composeapi.Compose
-	composeCLI      *command.DockerCli
-	events          *api.EventBus
-	registryConfig  *configfile.ConfigFile
-	runtimeConfig   api.EngineConfiguration
-	configMu        sync.Mutex
-	projectMu       sync.Mutex
-	portMu          sync.Mutex
-	forwards        map[forwardKey]*portForward
-	portReconcile   chan struct{}
-	sessionMu       sync.Mutex
-	sessions        map[string]*execSession
-	fileToolMu      sync.Mutex
-	transferMu      sync.Mutex
-	transfers       map[string]*transferSession
-	transfersClosed bool
+	id               string
+	dataRoot         string
+	hostIPv4         func() (netip.Addr, error)
+	docker           *client.Client
+	compose          composeapi.Compose
+	composeCLI       *command.DockerCli
+	events           *api.EventBus
+	registryConfig   *configfile.ConfigFile
+	runtimeConfig    api.EngineConfiguration
+	configMu         sync.Mutex
+	projectMu        sync.Mutex
+	portMu           sync.Mutex
+	forwards         map[forwardKey]*portForward
+	portReconcile    chan struct{}
+	linuxPortsMu     sync.RWMutex
+	linuxPortState   map[forwardKey]api.LinuxPortBinding
+	linuxPortChanged chan struct{}
+	linuxRelayPorts  map[linuxRelayKey]linuxFamilyRelay
+	sessionMu        sync.Mutex
+	sessions         map[string]*execSession
+	fileToolMu       sync.Mutex
+	transferMu       sync.Mutex
+	transfers        map[string]*transferSession
+	transfersClosed  bool
 }
 
 // New constructs a backend without requiring the engine to be online.
@@ -89,7 +95,7 @@ func New(engineID, endpoint, dataRoot string, events *api.EventBus) (*Backend, e
 		_ = docker.Close()
 		return nil, fmt.Errorf("initialize Docker CLI adapter: %w", err)
 	}
-	b := &Backend{id: engineID, dataRoot: dataRoot, docker: docker, events: events, registryConfig: configFile, runtimeConfig: runtimeConfig, portReconcile: make(chan struct{}, 1)}
+	b := &Backend{id: engineID, dataRoot: dataRoot, docker: docker, events: events, registryConfig: configFile, runtimeConfig: runtimeConfig, portReconcile: make(chan struct{}, 1), linuxPortChanged: make(chan struct{}), hostIPv4: windowsHostIPv4}
 	b.composeCLI = cli
 	b.compose, err = b.newCompose(context.Background(), io.Discard, "")
 	if err != nil {
@@ -203,6 +209,7 @@ func (b *Backend) Close() error {
 	transferErr := b.closeTransfers()
 	b.closeExecSessions()
 	b.closeWindowsPorts()
+	b.closeLinuxPortRelays()
 	return errors.Join(transferErr, b.docker.Close())
 }
 
@@ -216,6 +223,12 @@ func (b *Backend) Call(ctx context.Context, r api.Request) (any, error) {
 		return b.status(ctx), nil
 	case r.Method == "engine.configure":
 		return b.configure(r)
+	case r.Method == "engine.internal.hostaliases":
+		return nil, b.configureHostAliases(r)
+	case r.Method == "engine.internal.portbindings":
+		return b.linuxPortBindings(ctx)
+	case r.Method == "engine.internal.portstate":
+		return nil, b.updateLinuxPortState(ctx, r)
 	case strings.HasPrefix(r.Method, "compose."):
 		return b.composeCall(ctx, r)
 	case r.Method == "project.discover":

@@ -34,6 +34,7 @@ func testBackend(t *testing.T, handler http.HandlerFunc) *Backend {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = b.Close() })
+	b.hostIPv4 = testHostIPv4
 	return b
 }
 

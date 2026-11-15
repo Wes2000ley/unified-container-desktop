@@ -16,8 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/moby/client"
 	"github.com/skyri/ucd/internal/api"
 	"github.com/skyri/ucd/internal/dockerproxy"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Client sends Linux engine requests over mutually authenticated TLS. It is safe
@@ -82,6 +84,15 @@ func NewClient(settings api.Settings) (*Client, error) {
 // Its streams are canceled when the incoming request context ends.
 func (c *Client) DockerHandler() http.Handler {
 	return dockerproxy.New(c.dockerURL, c.transport)
+}
+
+// DockerClient uses the controller's existing mTLS identity for service-owned
+// event subscriptions. It does not pass through the Resource Saver wake gate.
+// The caller must close it after its subscriptions have stopped.
+func (c *Client) DockerClient() (*client.Client, error) {
+	endpoint := *c.dockerURL
+	endpoint.Scheme = "tcp" // Docker parses base paths for tcp hosts; TLS remains explicit.
+	return client.New(client.WithHTTPClient(c.client), client.WithHost(endpoint.String()), client.WithScheme("https"), client.WithTraceProvider(noop.NewTracerProvider()))
 }
 
 // Call executes one request. The caller controls cancellation and operation

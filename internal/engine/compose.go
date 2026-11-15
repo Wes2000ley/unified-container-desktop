@@ -242,6 +242,11 @@ func (b *Backend) composeCall(ctx context.Context, req api.Request) (any, error)
 		if err != nil {
 			err = fmt.Errorf("Compose %s: %w", p.Action, err)
 		}
+		if err == nil && b.id == "linux" && (p.Action == "up" || p.Action == "start" || p.Action == "restart") {
+			if portErr := b.waitLinuxProjectPorts(ctx, project.Name); portErr != nil {
+				err = portErr
+			}
+		}
 		if b.id == "windows" && (p.Action == "up" || p.Action == "start" || p.Action == "down" || p.Action == "stop" || p.Action == "restart") {
 			if portErr := b.reconcileActionPorts(ctx, func(c container.Summary) bool {
 				return c.Labels[composeapi.ProjectLabel] == project.Name

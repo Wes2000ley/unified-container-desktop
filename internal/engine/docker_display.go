@@ -70,7 +70,7 @@ func (b *Backend) serveDockerDisplay(w http.ResponseWriter, r *http.Request, nex
 		var err error
 		body, changed, err = b.decorateDockerDisplayBody(kind, response.header, body)
 		if err != nil {
-			dockerproxy.WriteError(w, http.StatusBadGateway, "could not add Windows container port metadata: "+err.Error())
+			dockerproxy.WriteError(w, http.StatusBadGateway, "could not project UCD published container ports: "+err.Error())
 			return
 		}
 	}
@@ -142,12 +142,53 @@ func (b *Backend) decorateDockerContainerList(body []byte) ([]byte, bool, error)
 			return nil, false, fmt.Errorf("decode Docker container list item %d", index)
 		}
 		var id, state string
-		if err := json.Unmarshal(fields["State"], &state); err != nil || !strings.EqualFold(state, "running") {
+		if err := json.Unmarshal(fields["State"], &state); err != nil {
 			continue
+		}
+		running := strings.EqualFold(state, "running")
+		if b.id == "linux" {
+			running = linuxPortStateIsActive(state)
 		}
 		labels, err := rawObject(fields["Labels"], "container labels")
 		if err != nil {
 			return nil, false, err
+		}
+		if b.id == "linux" {
+			requested, found, err := rawLinuxPortMetadata(labels)
+			if err != nil || !found {
+				if err != nil {
+					return nil, false, err
+				}
+				continue
+			}
+			if err := json.Unmarshal(fields["Id"], &id); err != nil || id == "" {
+				return nil, false, errors.New("Docker container list item has UCD Linux port metadata but no ID")
+			}
+			var ports []json.RawMessage
+			if rawPorts := fields["Ports"]; len(rawPorts) != 0 && string(rawPorts) != "null" {
+				if err := json.Unmarshal(rawPorts, &ports); err != nil {
+					return nil, false, fmt.Errorf("decode Docker container ports: %w", err)
+				}
+			}
+			ports, itemChanged, err := b.decorateLinuxDockerListPorts(id, requested, ports, running)
+			if err != nil {
+				return nil, false, err
+			}
+			if itemChanged {
+				fields["Ports"], err = json.Marshal(ports)
+				if err != nil {
+					return nil, false, fmt.Errorf("encode Docker container ports: %w", err)
+				}
+				entries[index], err = json.Marshal(fields)
+				if err != nil {
+					return nil, false, fmt.Errorf("encode Docker container list item: %w", err)
+				}
+				changed = true
+			}
+			continue
+		}
+		if !running {
+			continue
 		}
 		requested, found, err := rawWindowsPortMetadata(labels)
 		if err != nil || !found {
@@ -204,6 +245,58 @@ func (b *Backend) decorateDockerContainerList(body []byte) ([]byte, bool, error)
 	return updated, true, nil
 }
 
+func (b *Backend) decorateLinuxDockerListPorts(id string, requested []api.Port, ports []json.RawMessage, running bool) ([]json.RawMessage, bool, error) {
+	filtered := make([]json.RawMessage, 0, len(ports)+len(requested))
+	dockerRelays := newLinuxDockerRelayPorts(len(requested))
+	changed := false
+	for _, raw := range ports {
+		var item struct {
+			IP          string `json:"IP"`
+			PrivatePort uint16 `json:"PrivatePort"`
+			PublicPort  uint16 `json:"PublicPort"`
+			Type        string `json:"Type"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return nil, false, fmt.Errorf("decode Docker container port: %w", err)
+		}
+		ip, ipErr := netip.ParseAddr(item.IP)
+		if linuxRequestedPort(requested, item.PrivatePort, item.Type) && ipErr == nil && (ip.Unmap() == linuxRelayIP || ip == linuxRelayIPv6) {
+			key := linuxPortKey(item.PrivatePort, item.Type)
+			if item.PublicPort != 0 {
+				if err := dockerRelays.add(key, ip, item.PublicPort); err != nil {
+					return nil, false, fmt.Errorf("container %s has multiple Linux loopback relays for %s", id, key)
+				}
+			}
+			changed = true
+			continue
+		}
+		filtered = append(filtered, raw)
+	}
+	if running {
+		relays, err := b.hostRelayPorts(id, requested, dockerRelays)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, active := range b.activeLinuxPortBindings(id, requested, relays) {
+			if dockerListHasPort(filtered, active.Port) {
+				continue
+			}
+			encoded, err := json.Marshal(dockerPortSummary{
+				IP:          active.Port.HostIP,
+				PrivatePort: active.Port.Target,
+				PublicPort:  active.Port.Published,
+				Type:        active.Port.Protocol,
+			})
+			if err != nil {
+				return nil, false, fmt.Errorf("encode public Docker port summary: %w", err)
+			}
+			filtered = append(filtered, encoded)
+			changed = true
+		}
+	}
+	return filtered, changed, nil
+}
+
 type dockerPortSummary struct {
 	IP          string `json:"IP,omitempty"`
 	PrivatePort uint16 `json:"PrivatePort"`
@@ -238,6 +331,16 @@ func (b *Backend) decorateDockerContainerInspect(body []byte) ([]byte, bool, err
 	labels, err := rawObject(config["Labels"], "container labels")
 	if err != nil {
 		return nil, false, err
+	}
+	if b.id == "linux" {
+		requested, found, err := rawLinuxPortMetadata(labels)
+		if err != nil || !found {
+			if err != nil {
+				return nil, false, err
+			}
+			return body, false, nil
+		}
+		return b.decorateLinuxDockerInspect(fields, requested)
 	}
 	requested, found, err := rawWindowsPortMetadata(labels)
 	if err != nil || !found {
@@ -315,6 +418,125 @@ func (b *Backend) decorateDockerContainerInspect(body []byte) ([]byte, bool, err
 	return updated, true, nil
 }
 
+func (b *Backend) decorateLinuxDockerInspect(fields map[string]json.RawMessage, requested []api.Port) ([]byte, bool, error) {
+	var id string
+	if err := json.Unmarshal(fields["Id"], &id); err != nil || id == "" {
+		return nil, false, errors.New("Docker inspect response has UCD Linux port metadata but no ID")
+	}
+	requestedBindings, managedKeys, err := dockerPortBindings(requested)
+	if err != nil {
+		return nil, false, err
+	}
+	hostConfig, err := rawObject(fields["HostConfig"], "container host config")
+	if err != nil {
+		return nil, false, err
+	}
+	existingBindings, err := rawObject(hostConfig["PortBindings"], "container host port bindings")
+	if err != nil {
+		return nil, false, err
+	}
+	for key, value := range requestedBindings {
+		existingBindings[key] = value
+	}
+	hostConfig["PortBindings"], err = json.Marshal(existingBindings)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode Docker host port bindings: %w", err)
+	}
+	fields["HostConfig"], err = json.Marshal(hostConfig)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode Docker host config: %w", err)
+	}
+	state, err := rawObject(fields["State"], "container state")
+	if err != nil {
+		return nil, false, err
+	}
+	var running bool
+	_ = json.Unmarshal(state["Running"], &running)
+	networkSettings, err := rawObject(fields["NetworkSettings"], "container network settings")
+	if err != nil {
+		return nil, false, err
+	}
+	existingPorts, err := rawObject(networkSettings["Ports"], "container network ports")
+	if err != nil {
+		return nil, false, err
+	}
+	dockerRelays, err := rawLinuxRelayPorts(existingPorts, requested)
+	if err != nil {
+		return nil, false, err
+	}
+	for key := range managedKeys {
+		delete(existingPorts, key)
+	}
+	if running {
+		relays, err := b.hostRelayPorts(id, requested, dockerRelays)
+		if err != nil {
+			return nil, false, err
+		}
+		var active []api.Port
+		for _, binding := range b.activeLinuxPortBindings(id, requested, relays) {
+			active = append(active, binding.Port)
+		}
+		activeBindings, _, err := dockerPortBindings(active)
+		if err != nil {
+			return nil, false, err
+		}
+		for key, value := range activeBindings {
+			existingPorts[key] = value
+		}
+	}
+	networkSettings["Ports"], err = json.Marshal(existingPorts)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode Docker network ports: %w", err)
+	}
+	fields["NetworkSettings"], err = json.Marshal(networkSettings)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode Docker network settings: %w", err)
+	}
+	updated, err := json.Marshal(fields)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode Docker inspect response: %w", err)
+	}
+	return updated, true, nil
+}
+
+func rawLinuxRelayPorts(ports map[string]json.RawMessage, requested []api.Port) (linuxDockerRelayPorts, error) {
+	wanted := make(map[string]struct{})
+	for _, port := range requested {
+		wanted[linuxPortKey(port.Target, port.Protocol)] = struct{}{}
+	}
+	relays := newLinuxDockerRelayPorts(len(wanted))
+	for key, raw := range ports {
+		port, err := network.ParsePort(key)
+		if err != nil {
+			continue
+		}
+		portKey := linuxPortKey(port.Num(), string(port.Proto()))
+		if _, ok := wanted[portKey]; !ok {
+			continue
+		}
+		var bindings []struct {
+			HostIP   string `json:"HostIp"`
+			HostPort string `json:"HostPort"`
+		}
+		if json.Unmarshal(raw, &bindings) != nil {
+			continue
+		}
+		for _, binding := range bindings {
+			hostIP, err := netip.ParseAddr(binding.HostIP)
+			if err != nil || (hostIP.Unmap() != linuxRelayIP && hostIP != linuxRelayIPv6) {
+				continue
+			}
+			number, err := strconv.ParseUint(binding.HostPort, 10, 16)
+			if err == nil && number != 0 {
+				if err := relays.add(portKey, hostIP, uint16(number)); err != nil {
+					return linuxDockerRelayPorts{}, fmt.Errorf("multiple Linux loopback relays for %s", portKey)
+				}
+			}
+		}
+	}
+	return relays, nil
+}
+
 func rawWindowsPortMetadata(labels map[string]json.RawMessage) ([]api.Port, bool, error) {
 	raw, found := labels[windowsPortsLabel]
 	if !found {
@@ -325,6 +547,22 @@ func rawWindowsPortMetadata(labels map[string]json.RawMessage) ([]api.Port, bool
 		return nil, true, fmt.Errorf("decode %s label: %w", windowsPortsLabel, err)
 	}
 	ports, err := parseWindowsPortMetadata(value)
+	return ports, true, err
+}
+
+func rawLinuxPortMetadata(labels map[string]json.RawMessage) ([]api.Port, bool, error) {
+	raw, found := labels[linuxPortsLabel]
+	if !found {
+		return nil, false, nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, true, fmt.Errorf("decode %s label: %w", linuxPortsLabel, err)
+	}
+	if value == "" {
+		return nil, false, nil
+	}
+	ports, err := parseLinuxPortMetadata(value)
 	return ports, true, err
 }
 
@@ -419,7 +657,17 @@ func dockerPortIdentity(port api.Port) string {
 }
 
 func (b *Backend) decorateManagedInspectPorts(inspect *container.InspectResponse) error {
-	if b.id != "windows" || inspect.Config == nil || inspect.Config.Labels == nil {
+	if inspect.Config == nil || inspect.Config.Labels == nil {
+		return nil
+	}
+	if b.id == "linux" {
+		value, found := inspect.Config.Labels[linuxPortsLabel]
+		if !found || value == "" {
+			return nil
+		}
+		return b.decorateLinuxManagedInspectPorts(inspect, value)
+	}
+	if b.id != "windows" {
 		return nil
 	}
 	value, found := inspect.Config.Labels[windowsPortsLabel]

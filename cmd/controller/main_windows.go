@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	dockerclient "github.com/moby/moby/client"
 	"github.com/skyri/ucd/internal/api"
 	"github.com/skyri/ucd/internal/controller"
 	"github.com/skyri/ucd/internal/dockerproxy"
@@ -73,6 +74,7 @@ func run(ctx context.Context, root string) error {
 	defer win.Close()
 	var linux api.Caller
 	var linuxDocker http.Handler
+	var linuxEvents *dockerclient.Client
 	if err = pki.Ensure(filepath.Join(root, "certificates")); err != nil {
 		linux = failedCaller{fmt.Errorf("initialize helper certificates: %w", err)}
 		linuxDocker = unavailableDocker(fmt.Errorf("initialize helper certificates: %w", err))
@@ -88,6 +90,13 @@ func run(ctx context.Context, root string) error {
 			linux = client
 			linuxDocker = client.DockerHandler()
 			defer client.Close()
+			linuxEvents, e = client.DockerClient()
+			if e != nil {
+				events.Publish(api.Event{Type: "engine.port_error", Engine: "linux", Message: "initialize Linux host forwarding: " + e.Error()})
+				logger.Error("initialize Linux host forwarding", "error", e)
+			} else {
+				defer linuxEvents.Close()
+			}
 		}
 	}
 	manager, infraErr := platform.New(settings, events)
@@ -106,6 +115,7 @@ func run(ctx context.Context, root string) error {
 	owned, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
+	aliasTarget := linux
 	var saver *resourcesaver.Gate
 	if manager != nil {
 		saver, err = resourcesaver.New(resourcesaver.Config{Enabled: settings.ResourceSaver.Enabled, IdleSeconds: settings.ResourceSaver.IdleSeconds}, linux, manager, events)
@@ -145,6 +155,12 @@ func run(ctx context.Context, root string) error {
 				}
 			}
 		}()
+	}
+	workers.Add(1)
+	go func() { defer workers.Done(); syncHostAliases(owned, aliasTarget, events) }()
+	if linuxEvents != nil {
+		workers.Add(1)
+		go func() { defer workers.Done(); runLinuxHostPorts(owned, aliasTarget, linuxEvents, events) }()
 	}
 	workers.Add(1)
 	go func() {

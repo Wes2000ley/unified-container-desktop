@@ -15,7 +15,7 @@ const (
 	PipeName      = `\\.\pipe\UnifiedContainerDesktop`
 	ServiceName   = "UnifiedContainerDesktop"
 	OperatorGroup = "Container Operators"
-	Version       = "0.4.9"
+	Version       = "0.4.14"
 )
 
 type Request struct {
@@ -71,8 +71,8 @@ func Authorize(p Principal, method string) error {
 	if p.SID == "" {
 		return Fail("unauthenticated", "Windows identity is required")
 	}
-	if strings.HasPrefix(method, "registry.internal.") {
-		return Fail("permission_denied", "internal registry operations are not available to local clients")
+	if strings.HasPrefix(method, "registry.internal.") || strings.HasPrefix(method, "engine.internal.") {
+		return Fail("permission_denied", "internal service operations are not available to local clients")
 	}
 	switch method {
 	case "system.configure", "engine.configure", "wsl.configure", "engine.start", "engine.stop", "operator.add", "operator.remove", "share.create", "share.remove":

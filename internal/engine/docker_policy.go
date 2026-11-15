@@ -22,7 +22,7 @@ var dockerVersionPath = regexp.MustCompile(`^/v[0-9]+\.[0-9]+/`)
 // request and response bodies pass through unchanged except small create JSON.
 func (b *Backend) DockerPolicyHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if b.id == "windows" {
+		if b.id == "windows" || b.id == "linux" {
 			if kind := dockerDisplayKindFor(r.Method, r.URL.Path); kind != dockerDisplayNone {
 				b.serveDockerDisplay(w, r, next, kind)
 				return
@@ -64,8 +64,51 @@ func (b *Backend) DockerPolicyHandler(next http.Handler) http.Handler {
 			dockerproxy.WriteError(w, http.StatusBadRequest, "apply UCD defaults: "+err.Error())
 			return
 		}
+		if b.id == "windows" && path == "/containers/create" {
+			b.serveDockerCreateWithAliases(w, r, next)
+			return
+		}
+		if b.id == "linux" {
+			if id, ok := dockerContainerStartID(r.URL.Path); ok {
+				b.serveDockerContainerStart(w, r, next, id)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func dockerContainerStartID(path string) (string, bool) {
+	path = dockerVersionPath.ReplaceAllString(path, "/")
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "containers" || parts[1] == "" || (parts[2] != "start" && parts[2] != "restart") {
+		return "", false
+	}
+	return parts[1], true
+}
+
+func (b *Backend) serveDockerContainerStart(w http.ResponseWriter, r *http.Request, next http.Handler, id string) {
+	response := newDockerDisplayWriter(1 << 20)
+	next.ServeHTTP(response, r)
+	if response.tooLarge {
+		dockerproxy.WriteError(w, http.StatusBadGateway, "Docker container start response exceeds the UCD buffering limit")
+		return
+	}
+	status := response.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	if (status >= http.StatusOK && status < http.StatusMultipleChoices) || status == http.StatusNotModified {
+		if err := b.waitLinuxContainerPorts(r.Context(), id); err != nil {
+			dockerproxy.WriteError(w, http.StatusInternalServerError, "container started but UCD published port forwarding failed: "+err.Error())
+			return
+		}
+	}
+	for key, values := range response.header {
+		w.Header()[key] = append([]string(nil), values...)
+	}
+	w.WriteHeader(status)
+	_, _ = w.Write(response.body.Bytes())
 }
 
 func readDockerCreate(r *http.Request) (map[string]json.RawMessage, []byte, error) {

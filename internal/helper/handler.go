@@ -134,7 +134,7 @@ func allowedMethod(method string) bool {
 		return true
 	}
 	switch method {
-	case "project.discover", "system.events", "compose.validate", "compose.import", "compose.read", "compose.write", "compose.action", "compose.ports",
+	case "engine.internal.hostaliases", "engine.internal.portbindings", "engine.internal.portstate", "project.discover", "system.events", "compose.validate", "compose.import", "compose.read", "compose.write", "compose.action", "compose.ports",
 		"compose.logs.open", "compose.logs.read", "compose.logs.close":
 		return true
 	default:

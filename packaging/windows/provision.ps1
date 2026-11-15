@@ -1,4 +1,4 @@
-param([ValidateSet('install', 'rollback', 'restore-services')][string]$Action = 'install', [switch]$RemoveServices)
+param([ValidateSet('install', 'rollback', 'restore-services', 'firewall-remove')][string]$Action = 'install', [switch]$RemoveServices)
 $ErrorActionPreference = 'Stop'
 trap {
     $failure = $_.Exception.ToString() + [Environment]::NewLine + $_.InvocationInfo.PositionMessage + [Environment]::NewLine + $_.ScriptStackTrace
@@ -54,7 +54,9 @@ public static class UcdNative {
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool ChangeServiceConfig(IntPtr service, uint type, uint start, uint error, string path, string group, IntPtr tag, string dependencies, string user, string password, string display);
     [StructLayout(LayoutKind.Sequential)] struct ServiceAction { public uint Type, Delay; }
     [StructLayout(LayoutKind.Sequential)] struct ServiceFailureActions { public uint ResetPeriod; public IntPtr RebootMessage, Command; public uint Count; public IntPtr Actions; }
+    [StructLayout(LayoutKind.Sequential)] struct ServiceSidInfo { public uint Type; }
     [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool ChangeServiceConfig2(IntPtr service, uint infoLevel, ref ServiceFailureActions info);
+    [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool ChangeServiceConfig2(IntPtr service, uint infoLevel, ref ServiceSidInfo info);
     [DllImport("advapi32.dll")] static extern bool CloseServiceHandle(IntPtr handle);
     [DllImport("advapi32.dll", SetLastError=true)] static extern bool QueryServiceObjectSecurity(IntPtr service, uint information, byte[] descriptor, uint size, out uint needed);
     [DllImport("advapi32.dll", SetLastError=true)] static extern bool SetServiceObjectSecurity(IntPtr service, uint information, byte[] descriptor);
@@ -160,6 +162,11 @@ public static class UcdNative {
             } else if (!ChangeServiceConfig(service, 0xFFFFFFFF, 2, 0xFFFFFFFF, path, null, IntPtr.Zero, null, user, password, display))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Configure " + name);
             if (name == "UCDDocker") ConfigureDockerRecovery(service);
+            if (name == "UnifiedContainerDesktop") {
+                // Service-specific firewall rules require the service SID in its token.
+                var sid = new ServiceSidInfo { Type = 1 }; // SERVICE_SID_TYPE_UNRESTRICTED
+                if (!ChangeServiceConfig2(service, 5, ref sid)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Configure controller service SID");
+            }
         } finally { if (service != IntPtr.Zero) CloseServiceHandle(service); CloseServiceHandle(manager); }
     }
     static void ConfigureDockerRecovery(IntPtr service) {
@@ -187,6 +194,52 @@ function Assert-OwnedService([string]$Name, [string]$Executable) {
     if ($service -and $service.PathName -notlike "`"$Executable`"*") { throw "Service $Name already exists with another executable; refusing to replace it." }
 }
 
+function Set-PublishedPortFirewall([bool]$Remove, [bool]$StageRemoval = $false) {
+    $program = Join-Path $install 'controller.exe'
+    foreach ($protocol in @('TCP', 'UDP')) {
+        $name = 'UCD.PublishedPorts.' + $protocol
+        $rule = Get-NetFirewallRule -PolicyStore PersistentStore -Name $name -ErrorAction SilentlyContinue
+        if (-not $Remove) {
+            # Rename keeps every filter and administrator restriction intact
+            # until MSI commits removal. Rollback restores the exact rule.
+            $pending = Get-NetFirewallRule -PolicyStore PersistentStore -Name ($name + '.Removing') -ErrorAction SilentlyContinue
+            if ($pending) {
+                $application = $pending | Get-NetFirewallApplicationFilter
+                $service = $pending | Get-NetFirewallServiceFilter
+                if ($rule -or $pending.Group -cne 'Unified Container Desktop' -or $application.Program -ine $program -or $service.Service -ine 'UnifiedContainerDesktop') {
+                    throw "Cannot restore staged firewall rule $name; its ownership or destination is unexpected."
+                }
+                $pending | Rename-NetFirewallRule -NewName $name
+                $rule = Get-NetFirewallRule -PolicyStore PersistentStore -Name $name
+            }
+        }
+        if ($rule) {
+            $application = $rule | Get-NetFirewallApplicationFilter
+            $service = $rule | Get-NetFirewallServiceFilter
+            if ($rule.Group -cne 'Unified Container Desktop' -or $application.Program -ine $program -or $service.Service -ine 'UnifiedContainerDesktop') {
+                throw "Firewall rule $name belongs to another application; refusing to change it."
+            }
+            if ($Remove) {
+                if ($StageRemoval) {
+                    if (Get-NetFirewallRule -PolicyStore PersistentStore -Name ($name + '.Removing') -ErrorAction SilentlyContinue) { throw "Firewall removal already staged: $name" }
+                    $rule | Rename-NetFirewallRule -NewName ($name + '.Removing')
+                } else { $rule | Remove-NetFirewallRule }
+            }
+            # Preserve any administrator restrictions on an existing owned rule.
+        } elseif (-not $Remove) {
+            New-NetFirewallRule -PolicyStore PersistentStore -Name $name -DisplayName ('Unified Container Desktop published ' + $protocol + ' ports') `
+                -Group 'Unified Container Desktop' -Description 'Allows explicitly published container ports. Localhost bindings remain local.' `
+                -Direction Inbound -Action Allow -Profile Any -Protocol $protocol -Program $program -Service UnifiedContainerDesktop | Out-Null
+        }
+    }
+}
+
+if ($Action -eq 'firewall-remove') {
+    Assert-OwnedService 'UnifiedContainerDesktop' (Join-Path $install 'controller.exe')
+    Set-PublishedPortFirewall $true $true
+    exit 0
+}
+
 if ($Action -eq 'restore-services') {
     $dockerExe = Join-Path $install 'dockerd.exe'
     $controllerExe = Join-Path $install 'controller.exe'
@@ -198,6 +251,7 @@ if ($Action -eq 'restore-services') {
     [UcdNative]::EnsureService('UCDDocker', 'Unified Container Desktop Windows Engine', $dockerCommand, $false)
     [UcdNative]::EnsureService('UnifiedContainerDesktop', 'Unified Container Desktop', ('"' + $controllerExe + '"'), $true)
     [UcdNative]::EnsureControllerQueryAccess()
+    Set-PublishedPortFirewall $false
     Start-Service UCDDocker
     Start-Service UnifiedContainerDesktop
     exit 0
@@ -214,6 +268,7 @@ if ($Action -eq 'rollback') {
             if ($LASTEXITCODE -ne 0) { throw "Could not remove $name during rollback (sc.exe exit $LASTEXITCODE)" }
         }
     }
+    if ($RemoveServices) { Set-PublishedPortFirewall $true }
     exit 0
 }
 
@@ -306,6 +361,7 @@ $dockerCommand = '"' + $dockerExe + '" --run-service --service-name UCDDocker --
 [UcdNative]::EnsureService('UCDDocker', 'Unified Container Desktop Windows Engine', $dockerCommand, $false)
 [UcdNative]::EnsureService('UnifiedContainerDesktop', 'Unified Container Desktop', ('"' + $controllerExe + '"'), $true)
 [UcdNative]::EnsureControllerQueryAccess()
+Set-PublishedPortFirewall $false
 if (-not $restart) {
     Start-Service UCDDocker
     Start-Service UnifiedContainerDesktop

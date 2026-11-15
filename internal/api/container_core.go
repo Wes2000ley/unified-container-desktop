@@ -11,6 +11,20 @@ import (
 	"github.com/moby/moby/api/types/network"
 )
 
+// LinuxPortBinding joins a requested Windows host binding to Docker's private
+// Linux loopback port. These records travel only over the authenticated helper
+// connection. Index identifies the binding in the container's sorted metadata.
+type LinuxPortBinding struct {
+	Container string `json:"container"`
+	Index     int    `json:"index"`
+	Port      Port   `json:"port"`
+	RelayPort uint16 `json:"relayPort"`
+}
+
+type LinuxPortBindings struct {
+	Bindings []LinuxPortBinding `json:"bindings"`
+}
+
 // ContainerPublishedPorts returns explicit Docker bindings with UCD's default
 // loopback address. Dynamic host ports are represented by Published == 0.
 func ContainerPublishedPorts(p ContainerCreateParams) ([]Port, error) {

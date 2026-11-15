@@ -292,10 +292,11 @@ func (f *resolverFile) servers(configured []string) ([]string, error) {
 type exchangeFunc func(context.Context, []byte, bool, []string) ([]byte, error)
 
 type networkPolicy struct {
-	subnet netip.Prefix
-	mode   string
-	ipv4   bool
-	ipv6   bool
+	subnet  netip.Prefix
+	gateway netip.Addr
+	mode    string
+	ipv4    bool
+	ipv6    bool
 }
 
 type networkPolicies struct {
@@ -345,7 +346,7 @@ func selectPolicy(items []networkPolicy, ip netip.Addr) (networkPolicy, bool, er
 			selected, found = item, true
 			continue
 		}
-		if item.subnet.Bits() == selected.subnet.Bits() && (selected.mode != item.mode || selected.ipv4 != item.ipv4 || selected.ipv6 != item.ipv6) {
+		if item.subnet.Bits() == selected.subnet.Bits() && (selected.mode != item.mode || selected.ipv4 != item.ipv4 || selected.ipv6 != item.ipv6 || selected.gateway != item.gateway) {
 			return networkPolicy{}, false, errors.New("DNS client address matches conflicting Docker network policies")
 		}
 	}
@@ -379,7 +380,8 @@ func (p *networkPolicies) snapshot(ctx context.Context) ([]networkPolicy, error)
 			}
 			items = append(items, networkPolicy{
 				subnet: config.Subnet.Masked(), mode: mode,
-				ipv4: summary.EnableIPv4, ipv6: summary.EnableIPv6,
+				gateway: config.Gateway,
+				ipv4:    summary.EnableIPv4, ipv6: summary.EnableIPv6,
 			})
 		}
 	}
@@ -531,7 +533,8 @@ func resolve(ctx context.Context, query []byte, source net.Addr, tcp bool, setti
 	if err != nil {
 		return nil, err
 	}
-	if policy, found, err := policies.lookupWithDefault(ctx, source, config.Inhibition); err != nil {
+	policy, found, err := policies.lookupWithDefault(ctx, source, config.Inhibition)
+	if err != nil {
 		return nil, err
 	} else if found {
 		config, err = applyNetworkPolicy(config, policy)
@@ -541,6 +544,9 @@ func resolve(ctx context.Context, query []byte, source net.Addr, tcp bool, setti
 	}
 	answer, filtered, err := filteredAnswer(query, config)
 	if err != nil || filtered {
+		return answer, err
+	}
+	if answer, handled, err := dockerHostAnswer(query, filepath.Join(filepath.Dir(settings.path), "hostaliases.json"), policy.gateway); handled {
 		return answer, err
 	}
 	upstreams, err := resolvers.servers(config.Upstreams)

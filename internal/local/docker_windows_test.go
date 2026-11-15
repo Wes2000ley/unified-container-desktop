@@ -147,9 +147,11 @@ func TestDockerPipeUpgradeSupportsHalfClose(t *testing.T) {
 }
 
 func TestDockerPipeAcceptsDockerCLI(t *testing.T) {
-	docker, err := exec.LookPath("docker")
+	// This tests direct protocol access to a fixture pipe. The system-wide
+	// docker dispatcher intentionally rejects caller-supplied --host values.
+	docker, err := exec.LookPath("docker-cli")
 	if err != nil {
-		t.Skip("Docker CLI is not installed")
+		t.Skip("bundled upstream Docker CLI is not installed")
 	}
 	name := fmt.Sprintf("ucd-docker-cli-test-%d-%d", os.Getpid(), time.Now().UnixNano())
 	listener, err := winio.ListenPipe(`\\.\pipe\`+name, &winio.PipeConfig{SecurityDescriptor: dockerPipeSecurity(), MessageMode: true})

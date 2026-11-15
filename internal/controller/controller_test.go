@@ -232,17 +232,17 @@ func TestLinuxStreamingImageBuildGetsSharedRegistrySnapshot(t *testing.T) {
 	}
 }
 
-func TestRegistryInternalCallsCannotBeRequestedByLocalClients(t *testing.T) {
+func TestInternalServiceCallsCannotBeRequestedByLocalClients(t *testing.T) {
 	called := false
 	backend := callerFunc(func(context.Context, api.Request) (any, error) { called = true; return nil, nil })
 	c := New(testStore(t), backend, backend, nil, &api.EventBus{})
-	for _, method := range []string{"registry.internal.call", "registry.internal.snapshot", "registry.internal.sync"} {
+	for _, method := range []string{"registry.internal.call", "registry.internal.snapshot", "registry.internal.sync", "engine.internal.hostaliases", "engine.internal.portbindings", "engine.internal.portstate"} {
 		if _, err := c.Call(admin(), api.Request{Method: method, Engine: "windows"}); err == nil {
 			t.Errorf("accepted %s", method)
 		}
 	}
 	if called {
-		t.Fatal("internal registry request reached an engine")
+		t.Fatal("internal service request reached an engine")
 	}
 }
 

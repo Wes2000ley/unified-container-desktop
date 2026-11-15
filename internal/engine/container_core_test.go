@@ -323,7 +323,7 @@ func TestContainerExecInteractivePTY(t *testing.T) {
 }
 
 func TestContainerCreateWindowsPorts(t *testing.T) {
-	b := testBackend(t, func(w http.ResponseWriter, r *http.Request) {
+	b := testBackend(t, windowsAliasFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		p := dockerTestPath(w, r)
 		if p == "" {
 			return
@@ -356,7 +356,7 @@ func TestContainerCreateWindowsPorts(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprint(w, `{"Id":"win"}`)
-	})
+	}, nil))
 	b.id = "windows"
 	_, err := call(t, b, "container.create", map[string]any{"config": map[string]any{"Image": "example"}, "hostConfig": map[string]any{"PortBindings": map[string]any{"80/tcp": []any{map[string]any{"HostPort": "8080"}}}}})
 	if err != nil {
@@ -389,7 +389,8 @@ func TestContainerCreateAllExposedPortsDefaultToLoopback(t *testing.T) {
 			}
 			for _, key := range []string{"80/tcp", "53/udp"} {
 				binding := body.HostConfig.PortBindings[key]
-				if len(binding) != 1 || binding[0].HostIP != "127.0.0.1" || binding[0].HostPort != "" {
+				if len(binding) != 2 || binding[0].HostIP != "127.0.0.1" || binding[0].HostPort != "0" ||
+					binding[1].HostIP != "::1" || binding[1].HostPort != "0" {
 					t.Errorf("binding %s: %#v", key, binding)
 				}
 			}

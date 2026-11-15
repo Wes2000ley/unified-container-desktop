@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -49,7 +50,7 @@ func TestConfigurePersistsLimitsAndMarksResize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"processors=6", "memory=8192MB", "defaultVhdSize=256GB", "networkingMode=mirrored", "telemetry=false", "[experimental]\nautoMemoryReclaim=gradual", "[general]\ninstanceIdleTimeout=-1"} {
+	for _, want := range []string{"processors=6", "memory=8192MB", "defaultVhdSize=256GB", "networkingMode=mirrored", "dnsTunneling=true", "hostAddressLoopback=true", "telemetry=false", "[experimental]\nautoMemoryReclaim=gradual", "[general]\ninstanceIdleTimeout=-1"} {
 		if !strings.Contains(string(config), want) {
 			t.Errorf("missing %q in configuration", want)
 		}
@@ -67,6 +68,63 @@ func TestConfigurePersistsLimitsAndMarksResize(t *testing.T) {
 	}
 	if _, err := m.configure(0, 8192, 256); err == nil {
 		t.Fatal("accepted zero CPUs")
+	}
+}
+
+func TestStartupConfigUpgradeRecordsPendingRestartOnce(t *testing.T) {
+	m := testManager(t)
+	path := filepath.Join(m.settings.WSL.ProfileDirectory, ".wslconfig")
+	if err := os.WriteFile(path, []byte("[wsl2]\nnetworkingMode=mirrored\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.writeStartupConfig(true); err != nil {
+		t.Fatal(err)
+	}
+	if !m.state.RestartRequired || m.state.ChangedAt.IsZero() {
+		t.Fatalf("upgrade not pending: %+v", m.state)
+	}
+	changed := m.state.ChangedAt
+	if err := m.writeStartupConfig(true); err != nil {
+		t.Fatal(err)
+	}
+	if m.state.ChangedAt != changed {
+		t.Fatal("unchanged startup config moved pending timestamp")
+	}
+	config, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(config), "hostAddressLoopback=true") {
+		t.Fatalf("config=%s error=%v", config, err)
+	}
+
+	fresh := testManager(t)
+	if err := fresh.writeStartupConfig(false); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.state.RestartRequired {
+		t.Fatal("new installation requires unnecessary restart")
+	}
+}
+
+func TestRestartStatusRequiresNewKernelBoot(t *testing.T) {
+	for _, restarted := range []bool{false, true} {
+		m := testManager(t)
+		m.state.RestartRequired = true
+		m.state.ChangedAt = time.Now().Add(-time.Minute).UTC()
+		boot := m.state.ChangedAt.Add(-time.Hour)
+		if restarted {
+			boot = m.state.ChangedAt.Add(30 * time.Second)
+		}
+		m.runCommand = func(_ context.Context, _ io.Reader, args ...string) ([]byte, error) {
+			if !reflect.DeepEqual(args[len(args)-2:], []string{"/bin/cat", "/proc/stat"}) {
+				t.Fatalf("unexpected command %v", args)
+			}
+			return []byte(fmt.Sprintf("cpu 0 0 0\nbtime %d\n", boot.Unix())), nil
+		}
+		if err := m.clearRestartAfterBoot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if m.state.RestartRequired == restarted {
+			t.Fatalf("restarted=%t state=%+v", restarted, m.state)
+		}
 	}
 }
 

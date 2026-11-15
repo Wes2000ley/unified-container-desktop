@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"slices"
+	"sync"
 	"sync/atomic"
 
 	"github.com/skyri/ucd/frontend"
@@ -20,6 +21,16 @@ func main() {
 }
 
 func run() int {
+	background := slices.Contains(os.Args[1:], "--background")
+	instance, err := openDesktopInstance(background)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "open desktop instance:", err)
+		return 1
+	}
+	if instance == nil {
+		return 0
+	}
+	defer instance.close()
 	// Never redirect the desktop UI to an external development server.
 	if err := os.Unsetenv("FRONTEND_DEVSERVER_URL"); err != nil {
 		fmt.Fprintln(os.Stderr, "clear development server setting:", err)
@@ -48,7 +59,7 @@ func run() int {
 		Assets:   application.AssetOptions{Handler: application.BundledAssetFileServer(assets)},
 		Services: []application.Service{application.NewService(&Bridge{client: client, preferences: preferences})},
 	})
-	startHidden := slices.Contains(os.Args[1:], "--background") && preferences.Get().StartMinimized
+	startHidden := background && preferences.Get().StartMinimized
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "Unified Container Desktop",
@@ -83,8 +94,39 @@ func run() int {
 			window.Hide()
 		}
 	})
+	stopActivation := make(chan struct{})
+	var activation sync.WaitGroup
+	var activationFailed atomic.Bool
+	defer func() { close(stopActivation); activation.Wait() }()
+	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		activation.Add(1)
+		go func() {
+			defer activation.Done()
+			for {
+				select {
+				case <-stopActivation:
+					return
+				case <-instance.show:
+					showDesktopWindow(window)
+				case <-instance.quit:
+					exitRequested.Store(true)
+					app.Quit()
+					return
+				case err := <-instance.errors:
+					fmt.Fprintln(os.Stderr, err)
+					activationFailed.Store(true)
+					exitRequested.Store(true)
+					app.Quit()
+					return
+				}
+			}
+		}()
+	})
 	if err := app.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "run desktop:", err)
+		return 1
+	}
+	if activationFailed.Load() {
 		return 1
 	}
 	return 0

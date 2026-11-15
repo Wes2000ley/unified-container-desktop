@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -40,16 +41,11 @@ func (m *Manager) EnsureProvisioned(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := m.writeStartupConfig(registered); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	state := m.state
-	if err := writeAtomic(filepath.Join(m.settings.WSL.ProfileDirectory, ".wslconfig"), []byte(m.configText(state))); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("write service account WSL configuration: %w", err)
-	}
-	if err := m.saveState(state); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("persist WSL settings: %w", err)
-	}
 	m.mu.Unlock()
 	if !registered {
 		rootfs := filepath.Join(m.settings.DataRoot, "bootstrap", "debian-rootfs.tar")
@@ -70,7 +66,7 @@ func (m *Manager) EnsureProvisioned(ctx context.Context) error {
 	if err := m.ensureProcessTools(ctx); err != nil {
 		return err
 	}
-	if err := m.clearRestartAfterReboot(); err != nil {
+	if err := m.clearRestartAfterBoot(ctx); err != nil {
 		return err
 	}
 	if _, err := m.linux(ctx, bytes.NewReader(archive), "/bin/tar", "-xf", "-", "-C", "/"); err != nil {
@@ -404,12 +400,69 @@ func (m *Manager) applyPendingResize(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) clearRestartAfterReboot() error {
+// An upgrade may change WSL networking without changing the user's resource
+// limits. Record that change so the GUI never reports it applied to an old VM.
+func (m *Manager) writeStartupConfig(registered bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	path := filepath.Join(m.settings.WSL.ProfileDirectory, ".wslconfig")
+	previous, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read service account WSL configuration: %w", err)
+	}
+	next := m.state
+	config := []byte(m.configText(next))
+	if registered && !bytes.Equal(previous, config) {
+		next.RestartRequired = true
+		next.ChangedAt = time.Now().UTC()
+	}
+	if err := m.saveState(next); err != nil {
+		return fmt.Errorf("persist WSL settings: %w", err)
+	}
+	if err := writeAtomic(path, config); err != nil {
+		if rollbackErr := m.saveState(m.state); rollbackErr != nil {
+			return fmt.Errorf("write WSL config: %v; restore settings: %w", err, rollbackErr)
+		}
+		return fmt.Errorf("write service account WSL configuration: %w", err)
+	}
+	m.state = next
+	return nil
+}
+
+func (m *Manager) clearRestartAfterBoot(ctx context.Context) error {
 	ticks, _, _ := getTickCount64.Call()
 	boot := time.Now().Add(-time.Duration(ticks) * time.Millisecond)
 	m.mu.Lock()
+	state := m.state
+	m.mu.Unlock()
+	if !state.RestartRequired || state.DiskResizePending || state.ChangedAt.IsZero() {
+		return nil
+	}
+	if !boot.After(state.ChangedAt) {
+		// A service-account WSL VM restart also applies .wslconfig. Terminating
+		// just the distro can leave the same VM alive, so check its kernel boot.
+		out, err := m.linux(ctx, nil, "/bin/cat", "/proc/stat")
+		if err != nil {
+			return fmt.Errorf("verify WSL configuration restart: %w", err)
+		}
+		for _, line := range strings.Split(decodeWSLOutput(out), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[0] == "btime" {
+				seconds, err := strconv.ParseInt(fields[1], 10, 64)
+				if err != nil {
+					return fmt.Errorf("read WSL kernel boot time: %w", err)
+				}
+				boot = time.Unix(seconds, 0)
+				break
+			}
+		}
+		if !boot.After(state.ChangedAt) {
+			return nil
+		}
+	}
+	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.state.RestartRequired || m.state.DiskResizePending || m.state.ChangedAt.IsZero() || !boot.After(m.state.ChangedAt) {
+	if m.state != state {
 		return nil
 	}
 	next := m.state

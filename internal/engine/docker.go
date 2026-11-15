@@ -69,6 +69,30 @@ func (b *Backend) containerCall(ctx context.Context, req api.Request) (any, erro
 			if b.id == "windows" && string(c.State) == "running" {
 				forwarded = b.forwardedPorts(c.ID)
 			}
+			var linuxRequested []api.Port
+			linuxManaged := false
+			if b.id == "linux" {
+				if raw, ok := c.Labels[linuxPortsLabel]; ok && raw != "" {
+					linuxRequested, err = parseLinuxPortMetadata(raw)
+					if err != nil {
+						return nil, fmt.Errorf("container %s: %w", c.ID, err)
+					}
+					linuxManaged = true
+					if linuxPortStateIsActive(string(c.State)) {
+						dockerRelays, relayErr := relayPortsFromSummary(c, linuxRequested)
+						if relayErr != nil {
+							return nil, relayErr
+						}
+						relays, relayErr := b.hostRelayPorts(c.ID, linuxRequested, dockerRelays)
+						if relayErr != nil {
+							return nil, relayErr
+						}
+						for _, active := range b.activeLinuxPortBindings(c.ID, linuxRequested, relays) {
+							forwarded = append(forwarded, active.Port)
+						}
+					}
+				}
+			}
 			ports := make([]api.Port, 0, len(c.Ports)+len(forwarded))
 			for _, p := range c.Ports {
 				// Docker reports the exposed target separately; the UCD listener
@@ -81,6 +105,9 @@ func (b *Backend) containerCall(ctx context.Context, req api.Request) (any, erro
 					}
 				}
 				if duplicate {
+					continue
+				}
+				if linuxManaged && linuxRequestedPort(linuxRequested, p.PrivatePort, p.Type) {
 					continue
 				}
 				ip := ""
@@ -139,6 +166,11 @@ func (b *Backend) containerCall(ctx context.Context, req api.Request) (any, erro
 		}
 		if err != nil {
 			err = fmt.Errorf("container %s: %w", p.Action, err)
+		}
+		if err == nil && b.id == "linux" && (p.Action == "start" || p.Action == "restart") {
+			if portErr := b.waitLinuxContainerPorts(ctx, p.ID); portErr != nil {
+				err = portErr
+			}
 		}
 		if b.id == "windows" {
 			if portErr := b.reconcileActionPorts(ctx, func(c container.Summary) bool {

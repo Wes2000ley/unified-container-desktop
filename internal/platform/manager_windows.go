@@ -323,7 +323,7 @@ func writeAtomic(path string, data []byte) error {
 
 func (m *Manager) configText(state wslState) string {
 	swap := strings.ReplaceAll(filepath.Join(m.settings.DataRoot, "wsl", "swap.vhdx"), `\`, `\\`)
-	return fmt.Sprintf("[wsl2]\nprocessors=%d\nmemory=%dMB\ndefaultVhdSize=%dGB\nswapFile=%s\nnetworkingMode=mirrored\ntelemetry=false\n[experimental]\nautoMemoryReclaim=gradual\n[general]\ninstanceIdleTimeout=-1\n", state.CPUs, state.MemoryMB, state.DiskGB, swap)
+	return fmt.Sprintf("[wsl2]\nprocessors=%d\nmemory=%dMB\ndefaultVhdSize=%dGB\nswapFile=%s\nnetworkingMode=mirrored\ndnsTunneling=true\ntelemetry=false\n[experimental]\nautoMemoryReclaim=gradual\nhostAddressLoopback=true\n[general]\ninstanceIdleTimeout=-1\n", state.CPUs, state.MemoryMB, state.DiskGB, swap)
 }
 
 func (m *Manager) saveState(state wslState) error {
