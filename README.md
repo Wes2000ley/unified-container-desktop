@@ -8,11 +8,12 @@ users manage the same containers, images, volumes and registry sign-ins through
 the desktop, browser or ordinary `docker` and `docker compose` commands. No cloud
 account, subscription, telemetry or Docker Desktop installation is required.
 
-**Public beta preparation: 0.4.16.** The single-file Windows Setup bundles WSL and
+**Beta: 0.4.17.** The single-file Windows Setup bundles WSL and
 the Debian runtime, enables required Windows features and resumes after a required
-restart. The installed 0.4.14 runtime passed the scoped GUI/CLI acceptance recorded
-in [VALIDATION.md](VALIDATION.md). Fresh-machine qualification of the new Setup is
-tracked there separately; a successful build is not installation qualification.
+restart. Upgrades from the previous MSI and the previous Setup bundle passed on
+the development host, including container, volume and settings preservation at
+0.4.17. See [VALIDATION.md](VALIDATION.md) for exact results and limits. Fresh
+installation and restart/resume of this new Setup have not been live-qualified.
 
 See [Contributing](CONTRIBUTING.md) for development and bug reports and
 [Security](SECURITY.md) for privileges and vulnerability reporting.

@@ -1,7 +1,7 @@
-# Minimal web GUI application
+# Unified Container Desktop frontend
 
-Read README.md and package.json before editing. Build the user's actual product;
-the current home is a starter landing view, not a requested business feature.
+Read README.md and package.json before editing. Preserve the shared production
+desktop/browser interface and its real controller operations.
 Keep app composition above feature modules and generic components. Add libraries
 for an actual need and preserve the framework and design conventions.
 

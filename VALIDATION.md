@@ -1,5 +1,65 @@
 # Validation record
 
+## Installed beta and Windows exec stream fix (0.4.17)
+
+The Windows runner exposed immediate exec output loss through the authenticated
+broker. The `peerConn` wrapper embedded `net.Conn`, which hid the concrete message
+pipe's `CloseWrite`. ReverseProxy could then close the pipe before output was
+drained. The wrapper now preserves half-close, including the pipe's flush/EOF
+behavior. Authentication, authorization and pipe ACLs are unchanged.
+
+Two Windows test defects were also corrected. The raw-DACL test must map generic
+ACE rights before calling AccessCheck on a descriptor that has not been attached
+to an object, as described in [Microsoft's access-mask specification](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/7a53f60e-e730-4dfe-bbe9-b21b62eb790b).
+A current-user grant now verifies the fixture's access-check setup. The share-path
+test now compares against the canonical path; GitHub's `RUNNER~1` short path and
+`runneradmin` long path identify the same directory. No production path boundary
+was relaxed. Original failed CI/build logs are retained locally.
+
+- Source `70f636a3de917375e07c1b39bcf525734afce41a` passed
+  [GitHub CI](https://github.com/Wes2000ley/unified-container-desktop/actions/runs/43677966185):
+  frontend typecheck/lint/59 component tests, production build/audit, 21 fixture
+  browser workflows, Windows/Linux Go tests and vet, and Windows prerequisite and
+  Docker Desktop exclusion tests. CI also includes a Windows step that repeats
+  the immediate exec regression 100 times. That test passed 100 consecutive runs
+  locally with the fix; the complete local/platform tests and focused vet passed.
+- The 0.4.16-to-0.4.17 Setup upgrade returned 0 without a Windows restart. All 21
+  installed program/bootstrap hashes matched. Settings, operator membership,
+  automatic services and their account identities were preserved; both engines
+  were online at 0.4.17. Existing WSL 3.0.5 was retained.
+- Both fixtures were running at the actual upgrade baseline. Their IDs and volume
+  contents survived. Linux retained its original start time. Windows resumed with
+  a new start time under `unless-stopped` after native daemon restart; this was
+  recovery after interruption, not uninterrupted Windows container execution.
+- The unelevated operator passed 25 immediate-output Docker exec commands on each
+  engine (50 total), two stdin checks and two container-log checks. Linux stdin
+  was read through EOF. Windows stdin was read by cmd's `set /p`. Docker inventory,
+  Compose version and Buildx version worked on both engines. Plugin version checks
+  do not qualify Windows BuildKit RUN; existing engine limits below still apply.
+- Production web-adapter tests passed 2/2, and a separate real browser check saw
+  both running fixtures without page errors. Its inventory screenshot was visually
+  inspected. Repeated desktop/Start menu launches left one installed desktop
+  process. Installed Apps showed one visible 0.4.17 bundle and its hidden MSI;
+  there was no old product entry. Ordinary `docker` resolved to UCD's installed
+  dispatcher. The exact owned fixtures were removed, leaving both engines and
+  the desktop running.
+- The rebuilt 0.4.17 production frontend audit reported zero vulnerabilities.
+  The nine moderate developer-tool reports documented in RELEASING.md remain.
+- Reviewed payload hashes, upgrade and normal-user receipts, installer logs,
+  screenshot and fixture cleanup manifest are retained under
+  `work/ucd-desktop-0.4.17`, relative to the task root. The tested local Setup SHA-256
+  is `727945f86aa1ae32f3adc6b5e7f1e7a80fc584512c177909b391b91cfa1154d1`.
+  The [separate release build](https://github.com/Wes2000ley/unified-container-desktop/actions/runs/43678022457)
+  uses the same runtime source and builds the rootfs/sources on Linux and packages
+  on Windows. Its artifacts have their own checksums and are distinct builds.
+
+At the user's request, no new VM or host restart was used. Fresh installation,
+actual optional-feature or missing/old WSL installation, reboot/resume, and the
+new bundle's uninstall/rollback remain unqualified by live tests. The 18 mocked
+prerequisite checks and historical MSI/VM results are separate evidence. The
+application and Setup remain unsigned. This is a beta qualification on the
+recorded host, not a universal Windows or independent security certification.
+
 ## Single-file Setup and public beta preparation (0.4.16)
 
 The new WiX 4.0.6 Burn bundle embeds the prerequisite launcher/scripts, verified
@@ -51,7 +111,41 @@ Local validation to this point:
   property. The MSI now sets UCD's `amus` policy in its execute sequence before
   costing, retaining replacement of packaged unversioned files during repair.
 
-Final installed-bundle qualification and remote CI results will be recorded below.
+Final installed-bundle qualification (0.4.15 to 0.4.16):
+
+- Setup returned 0 with both prerequisite packages returning 0; installed WSL
+  3.0.5 was retained. No Windows restart was requested or performed. The MSI log
+  confirms the execute sequence changes Burn's `muso` value back to `amus`.
+- All 21 reviewed installed payload hashes matched. Settings, operator membership
+  and service identities/automatic startup were preserved; both engines were
+  online at controller version 0.4.16. Existing container IDs were preserved.
+  The running Linux fixture remained running with the same recorded start time;
+  the stopped Windows fixture remained stopped.
+- A marker in each engine's named volume survived the upgrade. The Linux marker
+  was read through exec in the preserved container. The Windows marker was read
+  by a separate Hyper-V-isolated Nano Server container, without rewriting it.
+- An unelevated operator successfully used Docker inventory, Compose version and
+  Buildx version on both engines. Buildx version checks do not qualify Windows
+  BuildKit builds; the earlier Windows graphdriver limitations below still apply.
+- Repeated executable and actual Start menu shortcut launches left one installed
+  desktop process. Installed Apps contained one visible 0.4.16 bundle entry and
+  its hidden 0.4.16 MSI, with no old product entry remaining.
+- Production web-adapter tests passed 2/2. An additional real browser check saw
+  both preserved containers through the installed 0.4.16 adapter, with no page
+  errors. Its inventory screenshot was inspected. These checks used the real
+  service, not the frontend fixture bridge. Only the exact owned containers and
+  named volumes were removed afterward; both engines and the desktop stayed up.
+- Receipts, reviewed hashes, native installer logs, browser screenshot and exact
+  fixture cleanup manifest are under `work/ucd-desktop-0.4.16`, relative to the
+  task root. The Setup SHA-256 is
+  `2be39dc463acbfc20a1a436387b4335a99d42fe29b0933023d3c2427d5f618f5`.
+
+The initial GitHub CI run exposed an asynchronous registry-test race: sign-in
+refresh temporarily hides the list, but the test immediately queried Sign out.
+The test now awaits the refreshed control; its focused 17-test file passed.
+Production registry behavior was unchanged. Remote CI/build results are recorded
+with their exact source commits below when complete.
+
 The user explicitly declined another test VM. A fresh Windows installation,
 actual optional-feature/WSL installation, restart/resume, and bundle uninstall or
 rollback are not live-qualified by these upgrade-only checks. Historical MSI-only

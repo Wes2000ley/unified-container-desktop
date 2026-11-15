@@ -38,7 +38,7 @@ release notes must describe the supported Windows editions, the standalone
 Windows-engine support boundary, and any unqualified installer paths.
 
 The production frontend dependency audit and the full developer-tool audit are
-different checks. At 0.4.16 preparation, the production audit reported no
+different checks. At 0.4.17 preparation, the production audit reported no
 vulnerabilities. Nine moderate developer-tool reports trace to minimatch's glob
 amplification advisory, [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
 The pinned typescript-eslint release still requires minimatch 10; no dependency
